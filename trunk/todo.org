@@ -1,0 +1,4 @@
+* TODO Make go to last input functionality a ring
+* TODO popup the R buffer on  _errors_ and/or on _debug at_ things
+
+
