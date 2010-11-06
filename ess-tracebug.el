@@ -229,7 +229,7 @@ You can bound 'no-select' versions of this commands  for convenience:
   ;;           (interactive-p)))
   (ess-force-buffer-current "R process to use: ")
   (let ((trbuf  (get-buffer-create "*ess-traceback*")))
-    (setq next-error-last-buffer trbuf) ;; need to avoid 
+    (setq next-error-last-buffer trbuf) ;; need to avoid
     (set-buffer trbuf)
     (toggle-read-only -1)
     (ess-command  "try(traceback(), silent=TRUE);cat(\n\"---------------------------------- \n\", geterrmessage(), fill=TRUE)\n" trbuf)
@@ -431,12 +431,14 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
   `ess-tb-last-input-overlay' to apropriate positions.'"
   (save-excursion
     (goto-char comint-last-input-start)
-    (setq ess-tb-last-input (point))
+     (setq ess-tb-last-input (point))
     (inferior-ess-move-last-input-overlay)
     )
   )
 
-(ad-activate 'inferior-ess-send-input)
+;;(ad-activate 'inferior-ess-send-input)
+;;(ad-deactivate 'inferior-ess-send-input)
+
 
 (print "<- advising done")
 ;;;; DEBUGER
@@ -1363,7 +1365,7 @@ to the current position, nil if not found. "
       )
     (goto-char (1- init-pos))
     ))
-        
+
 
 (defun ess-bp-toggle-state ()
   "Toggle the breakpoint between active and inactive states."
