@@ -199,7 +199,7 @@ errors.  See `compilation-mode'."
     )
 )
 
-(defvar ess-R-tb-regexp-alist '(R R3 Rrec)
+(defvar ess-R-tb-regexp-alist '(R R3 R-recover)
   "List of symbols which are looked up in `compilation-error-regexp-alist-alist'.")
 
 (add-to-list 'compilation-error-regexp-alist-alist
@@ -209,12 +209,12 @@ errors.  See `compilation-mode'."
 (add-to-list 'compilation-error-regexp-alist-alist
              '(R3 "\\(?:Error .*: +\n? +\\)\\(.*\\):\\([0-9]+\\):\\([0-9]+\\):"  1 2 nil 2 1))
 (add-to-list 'compilation-error-regexp-alist-alist
-             '(Rrec "^ *[0-9]+: +\\(.+\\)#\\([0-9]+:\\)" 1 2 nil 0 1))
+             '(R-recover "^ *[0-9]+: +\\(.+\\)#\\([0-9]+:\\)" 1 2 nil 2 1))
 
-;; (setq ess-R-tb-regexp-alist '(R R2 R3 Rrec))
+;; (setq ess-R-tb-regexp-alist '(R R2 R3 R-recover))
 ;; (pop compilation-error-regexp-alist-alist)
 
-(defun ess-R-traceback ()
+(defun ess-show-R-traceback ()
   "Display R traceback and last error message.
 Pop up a compilation/grep/occur like buffer. Usual global key
 bindings are available \(\\[next-error] and \\[previous-error]\)
@@ -241,7 +241,7 @@ You can bound 'no-select' versions of this commands  for convenience:
       (make-local-variable 'compilation-error-regexp-alist)
       (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
       (compilation-minor-mode 1)
-      (use-local-map ess-traceback-minor-mode-map)
+      ;(use-local-map ess-traceback-minor-mode-map)
       (pop-to-buffer trbuf)
       (toggle-read-only 1)
       )
@@ -1161,6 +1161,21 @@ Equivalent to 'n' at the R prompt."
   (message "not implemented yet")
   )
 
+(defun ess-dbg-set-last-input ()
+  "Set the `ess-tb-last-input' to point to the current process-mark"
+  (interactive)
+  (let* ((last-input-process (get-process ess-local-process-name))
+         (last-input-mark (copy-marker (process-mark last-input-process))))
+    (with-current-buffer (process-buffer last-input-process)
+      (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
+        (setq ess-tb-last-input last-input-mark)
+        (goto-char last-input-mark)
+        (inferior-ess-move-last-input-overlay)
+        (comint-goto-process-mark)
+        )
+      )
+    )
+  )
 
 (defun ess-dbg-source-curent-file ()
   "Save current file and source it in the .R_GlobalEnv environment."
@@ -1171,6 +1186,7 @@ Equivalent to 'n' at the R prompt."
       (save-selected-window
         (ess-switch-to-ESS t)
         )
+      (ess-dbg-set-last-input)
       (process-send-string (get-process ess-current-process-name)
                            (concat "\ninvisible(eval({source(file=\"" buffer-file-name
                                    "\")\n cat(\"Sourced: " buffer-file-name "\\n\")}, env=globalenv()))\n")
