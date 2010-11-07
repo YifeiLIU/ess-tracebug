@@ -436,7 +436,7 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
     )
   )
 
-;;(ad-activate 'inferior-ess-send-input)
+;;ad-activate 'inferior-ess-send-input)
 ;;(ad-deactivate 'inferior-ess-send-input)
 
 
