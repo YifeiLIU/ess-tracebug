@@ -57,9 +57,9 @@
   :group 'ess
   )
 
-;;;; TRACEBACK
-(require 'compile)
+;;;_* TRACEBACK
 
+(require 'compile)
 (defgroup ess-traceback nil
   "Tracing facilities for ess."
   :link '(emacs-library-link :tag "Source Lisp File" "ess-tracebug.el")
@@ -129,9 +129,7 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
      ,fun
      ))
 
-
-;;; TRACEBACK functions
-
+;;;_ + traceback functions
 (defun ess-tb-make-last-input-overlay (beg end)
   "Create an overlay to indicate the last input position."
   (let   ((ove (make-overlay beg end)))
@@ -334,7 +332,7 @@ This is the value of `next-error-function' in iESS buffers."
 
 (print "<- traceback done")
 
-;;; ADVICING
+;;;_ + ADVICING
 ;;; (needed to implement the last user input functionality)
 ;;; redefining eval-region is needed to avoid messing the debugger.
 ;;; New version flushes all blank lines and trailing \n's.
@@ -441,7 +439,9 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
 
 
 (print "<- advising done")
-;;;; DEBUGER
+
+
+;;;_* DEBUGER
 
 (defgroup ess-debug nil
   "Debug facilities for ess (currently tested only with R)."
@@ -672,6 +672,7 @@ This commands are triggered by `ess-dbg-easy-command' ."
 
 (print "<- debug-vars done")
 
+;;;_ + debug functions
 (defun ess-dbg-set-error-action (spec)
   "Set the on-error action. The ACTION should be  one
 of components of `ess-dbg-error-action-alist' (a cons!)."
@@ -1193,7 +1194,7 @@ Equivalent to 'n' at the R prompt."
       )
   )
 
-;;;; BREAKPOINTS
+;;;_ + BREAKPOINTS
 
 (defface ess-bp-fringe-inactive-face
   '((((background light)) (:foreground "DimGray"))
@@ -1487,7 +1488,7 @@ to the current position, nil if not found. "
     )
   )
 
-;;;_ Kludges and Fixes
+;;;_* Kludges and Fixes
 
 ;;; delete-char and delete-backward-car do not delete whole intangible text
 (defadvice delete-char (around delete-backward-char-intangible activate)
