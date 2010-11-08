@@ -460,7 +460,6 @@ See `ess-dbg-error-action-alist' for more."
 
 (defcustom  ess-dbg-error-action-alist
   '(( "-". "NULL" )
-    ( "b". "base::browser")
     ( "r". "utils::recover")
     ( "t". "base::traceback"))
   "Alist of 'on-error' actions.
@@ -1232,7 +1231,7 @@ Equivalent to 'n' at the R prompt."
 ;;                                    '(ess-bp . t))))
 
 (defcustom ess-bp-type-spec-alist
-      '((browser "browser()" "B>\n"  filled-square  ess-bp-fringe-browser-face)
+      '((browser "browser()" "B>\n"   filled-square  ess-bp-fringe-browser-face)
         (recover "recover()" "R>\n"   filled-square  ess-bp-fringe-recover-face)
         )
       "List of lists of breakpoint types.
@@ -1265,9 +1264,9 @@ TODO: nil??."
          (fringe-bitmap (nth 3 bp-specs))
          (fringe-face (nth 4 bp-specs))
          (displ-string (nth 2 bp-specs))
-         (bp-command (concat  (nth 1 bp-specs) "#*ess-breakpoint*#\n"))
+         (bp-command (concat  (nth 1 bp-specs) "##:ess-bp-end:##\n"))
          (bp-length (length bp-command))
-         (dummy-string "#*ess-bp-dummy*#\n")
+         (dummy-string (concat "##:ess-bp-start::" (prin1-to-string (car bp-specs)) ":##\n"))
          (dummy-length (length dummy-string))
          insertion-pos
          )
@@ -1359,6 +1358,7 @@ to the current position, nil if not found. "
       (delete-region (car pos) (cdr pos))
       (indent-for-tab-command)
       (goto-char (1- init-pos))
+      (if (eq (point) (point-at-eol)) (forward-char))
   ))
   )
 
@@ -1386,11 +1386,13 @@ to the current position, nil if not found. "
 (defun ess-bp-toggle-state ()
   "Toggle the breakpoint between active and inactive states."
   (interactive)
-  (let ((pos (ess-bp-get-bp-position-nearby))
-        (fringe-face (nth 3 ess-bp-inactive-spec))
-        (inhibit-point-motion-hook t)  ;; deactivates intangible property
-        beg-pos-dummy end-pos-comment bp-specs)
-    (save-excursion
+  (save-excursion
+    (let ((pos (ess-bp-get-bp-position-nearby))
+          (fringe-face (nth 3 ess-bp-inactive-spec))
+          (inhibit-point-motion-hooks t)  ;; deactivates intangible property
+          beg-pos-dummy end-pos-comment bp-specs)
+      (if (null pos)
+          (message "No breakpoints in the visible region")
         (goto-char (car pos))
         (setq beg-pos-command (previous-single-property-change (cdr pos) 'bp-substring nil (car pos)))
         (goto-char beg-pos-command)
@@ -1410,7 +1412,7 @@ to the current position, nil if not found. "
                               'display (propertize (nth 1 ess-bp-inactive-spec) 'face fringe-face)
                               'bp-type (get-char-property (point) 'bp-type)
                               'bp-substring 'comment
-      ))))))
+                              )))))))
 
 
 (defun ess-bp-make-visible ()
@@ -1419,7 +1421,7 @@ to the current position, nil if not found. "
   (let ((pos (ess-bp-get-bp-position-nearby)))
     (set-text-properties (car pos) (cdr pos) (list 'display nil))
     )
-)
+  )
 
 (defun ess-bp-set ()
   (interactive)
@@ -1432,20 +1434,20 @@ to the current position, nil if not found. "
          (com-char  (event-basic-type ev))
          )
     (when same-line
-        (setq bp-type (get-text-property (car pos) 'bp-type))  ;; the meaning of bp-type changes latter (confounding slightly)
-        (setq types (cdr (member (assq bp-type types) types))) ; nil if bp-type is last in the list
-        (if (null types) (setq types ess-bp-type-spec-alist))
-        (ess-bp-kill)
-        (indent-for-tab-command)
-        )
+      (setq bp-type (get-text-property (car pos) 'bp-type))  ;; the meaning of bp-type changes latter (confounding slightly)
+      (setq types (cdr (member (assq bp-type types) types))) ; nil if bp-type is last in the list
+      (if (null types) (setq types ess-bp-type-spec-alist))
+      (ess-bp-kill)
+      (indent-for-tab-command)
+      )
     (setq bp-type (pop types))
     (ess-bp-create (car bp-type))
     (while  (eq (setq ev (read-event)) com-char)
-        (if (null types) (setq types ess-bp-type-spec-alist))
-        (setq bp-type (pop types))
-        (ess-bp-kill)
-        (ess-bp-create (car bp-type))
-        (indent-for-tab-command)
+      (if (null types) (setq types ess-bp-type-spec-alist))
+      (setq bp-type (pop types))
+      (ess-bp-kill)
+      (ess-bp-create (car bp-type))
+      (indent-for-tab-command)
       )
     (push ev unread-command-events)
     )
@@ -1483,6 +1485,46 @@ to the current position, nil if not found. "
         (goto-char bp-pos))
       )
     )
+  )
+
+;;;_ Kludges and Fixes
+
+;;; delete-char and delete-backward-car do not delete whole intangible text
+(defadvice delete-char (around delete-backward-char-intangible activate)
+  "When about to delete a char that's intangible, delete the whole intangible region
+Only do this when #chars is 1"
+  (if (and (= (ad-get-arg 0) 1)
+           (get-text-property (point) 'intangible))
+      (progn 
+       (kill-region (point) (next-single-property-change (point) 'intangible))
+       (indent-for-tab-command)
+       )
+    ad-do-it
+    ))
+
+(defadvice delete-backward-char (around delete-backward-char-intangible activate)
+  "When about to delete a char that's intangible, delete the whole intangible region
+Only do this when called interactively and  #chars is 1"
+  (if (and (= (ad-get-arg 0) 1)
+           (> (point) (point-min))
+           (get-text-property (1- (point)) 'intangible))
+      (progn
+        (kill-region (previous-single-property-change (point) 'intangible) (point))
+        (indent-for-tab-command)
+        )
+    ad-do-it
+    ))
+
+;;; previous-line gets stuck if next char is intangible
+(defadvice previous-line (around solves-intangible-text-kludge activate)
+  "When about to move to previous line when next char is
+intanbible, step char backward first"
+  (if (and (or (null (ad-get-arg 0))
+               (= (ad-get-arg 0) 1))
+           (get-text-property (point) 'intangible))
+      (backward-char 1)
+    )
+  ad-do-it
   )
 
 ;;TODO
