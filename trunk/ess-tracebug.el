@@ -249,7 +249,7 @@ You can bound 'no-select' versions of this commands  for convenience:
 (defun ess-tb-next-error-goto-process-marker ()
   ;; assumes current buffer is the process buffer with compilation enabled
   ;; used in ess-tb-next-error-function
-;  (with-current-buffer (process-buffer (get-process ess-local-process-name)) ; already in comint buffer .. no need 
+;  (with-current-buffer (process-buffer (get-process ess-local-process-name)) ; already in comint buffer .. no need
     (comint-goto-process-mark)
     (set-window-point (get-buffer-window) (point))  ;moves the cursor
     (when (and (local-variable-p ess-dbg-is-active)
@@ -276,7 +276,7 @@ This is the value of `next-error-function' in iESS buffers."
                       )
                     )
            (loc (condition-case err
-                    (compilation-next-error n  nil beg-pos)  
+                    (compilation-next-error n  nil beg-pos)
                   (error
                    (ess-tb-next-error-goto-process-marker)
                    (error "Passed beyond last reference");(error-message-string err))
@@ -638,6 +638,7 @@ rebind `M-t` to transpose-words command in the `ess-debug-map'."
     (define-prefix-command 'map)
     (define-key map "i" 'ess-dbg-goto-input-point)
     (define-key map "d" 'ess-dbg-goto-debug-point)
+    (define-key map "I" 'ess-dbg-insert-input-ring)
     (define-key map "b" 'ess-bp-set)
     (define-key map "t" 'ess-bp-toggle-state)
     (define-key map "k" 'ess-bp-kill)
@@ -776,7 +777,7 @@ of the ring."
         (com-char  (event-basic-type ev))
         (ring-el 0))
     (if (ess-dbg-is-active)
-        (progn 
+        (progn
           (switch-to-buffer (marker-buffer ess-dbg-current-debug-position))
           (goto-char (marker-position ess-dbg-current-debug-position ))
           (back-to-indentation)
@@ -796,6 +797,13 @@ of the ring."
     (push ev unread-command-events)
     )
   )
+
+(defun ess-dbg-insert-input-ring ()
+  (interactive)
+  "Inserts point-marker into the input-ring."
+  (ring-insert ess-dbg-input-ring (point-marker))
+  (message "Inserted into the input-ring")
+)
 
 (defun ess-debug (&optional arg)
   "Toggle ess-debug mode.
@@ -1218,6 +1226,7 @@ Equivalent to 'n' at the R prompt."
 (defun ess-dbg-set-last-input ()
   "Set the `ess-tb-last-input' to point to the current process-mark"
   (interactive)
+  (ess-force-buffer-current "R process to use: ")
   (let* ((last-input-process (get-process ess-local-process-name))
          (last-input-mark (copy-marker (process-mark last-input-process))))
     (with-current-buffer (process-buffer last-input-process)
@@ -1550,7 +1559,7 @@ to the current position, nil if not found. "
 Only do this when #chars is 1"
   (if (and (= (ad-get-arg 0) 1)
            (get-text-property (point) 'intangible))
-      (progn 
+      (progn
        (kill-region (point) (next-single-property-change (point) 'intangible))
        (indent-for-tab-command)
        )
