@@ -645,7 +645,6 @@ rebind `M-t` to transpose-words command in the `ess-debug-map'."
     (define-key map "\C-n" 'ess-bp-next)
     (define-key map "\C-p" 'ess-bp-previous)
     (define-key map "e" 'ess-dbg-toggle-error-action)
-    (define-key map "D" 'ess-dbg-toggle-active)
     (define-key map "c" 'ess-dbg-easy-command)
     (define-key map "n" 'ess-dbg-easy-command)
     (define-key map "p" 'ess-dbg-easy-command)
