@@ -1,4 +1,9 @@
-* TODO Make go to last input functionality a ring
+* TODO make ess-eval-region insert the source
+* TODO debug/undebug at point
+* TODO implement the "u" command
+* TODO persistent breakpoints (i.e. activate the display on file load)
+* DONE Make go to last input functionality a ring
+  CLOSED: [2010-11-11 Thu 13:54]
 * TODO popup the R buffer on  _errors_ and/or on _debug at_ things
 
 
