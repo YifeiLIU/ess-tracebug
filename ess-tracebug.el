@@ -637,11 +637,12 @@ rebind `M-t` to transpose-words command in the `ess-debug-map'."
   (let ((map (make-sparse-keymap)))
     (define-prefix-command 'map)
     (define-key map "i" 'ess-dbg-goto-input-point)
+    (define-key map "I" 'ess-dbg-insert-in-input-ring)
     (define-key map "d" 'ess-dbg-goto-debug-point)
-    (define-key map "I" 'ess-dbg-insert-input-ring)
     (define-key map "b" 'ess-bp-set)
     (define-key map "t" 'ess-bp-toggle-state)
     (define-key map "k" 'ess-bp-kill)
+    (define-key map "K" 'ess-bp-kill-all)
     (define-key map "\C-n" 'ess-bp-next)
     (define-key map "\C-p" 'ess-bp-previous)
     (define-key map "e" 'ess-dbg-toggle-error-action)
@@ -797,7 +798,7 @@ of the ring."
     )
   )
 
-(defun ess-dbg-insert-input-ring ()
+(defun ess-dbg-insert-in-input-ring ()
   (interactive)
   "Inserts point-marker into the input-ring."
   (ring-insert ess-dbg-input-ring (point-marker))
@@ -1243,6 +1244,9 @@ Equivalent to 'n' at the R prompt."
   "Save current file and source it in the .R_GlobalEnv environment."
   ;; make it more elaborate :todo:
   (interactive)
+  (unless ess-current-process-name
+    (ess-force-buffer-current "R process to use: ")
+    )
   (when buffer-file-name
       (save-buffer)
       (save-selected-window
