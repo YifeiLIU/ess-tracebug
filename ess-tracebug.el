@@ -252,12 +252,11 @@ You can bound 'no-select' versions of this commands  for convenience:
 ;  (with-current-buffer (process-buffer (get-process ess-local-process-name)) ; already in comint buffer .. no need
     (comint-goto-process-mark)
     (set-window-point (get-buffer-window) (point))  ;moves the cursor
-    (when (and (local-variable-p ess-dbg-is-active)
-               (ess-dbg-is-active))
-      (ess-dbg-goto-current-debug-position)
-      )
+    ;; FIXME: Should jump to current-debug-position,  but will mess the things if in recover
+    ;; (when (ess-dbg-is-active)
+    ;;   (ess-dbg-goto-current-debug-position)
+    ;;   )
 )
-
 (defun ess-tb-next-error-function (n &optional reset)
     "Advance to the next error message and visits the file.
 This is the value of `next-error-function' in iESS buffers."
@@ -281,7 +280,8 @@ This is the value of `next-error-function' in iESS buffers."
                    (ess-tb-next-error-goto-process-marker)
                    (error "Passed beyond last reference");(error-message-string err))
                    )))
-           (loc (if (> (point) ess-tb-last-input)
+           (loc (if (or (eq n 0)
+                        (> (point) ess-tb-last-input))
                     loc
                   (ess-tb-next-error-goto-process-marker)
                   (error "Passed beyond last-input marker")))
