@@ -232,7 +232,7 @@ You can bound 'no-select' versions of this commands  for convenience:
     (toggle-read-only -1)
     (ess-command  "try(traceback(), silent=TRUE);cat(\n\"---------------------------------- \n\", geterrmessage(), fill=TRUE)\n" trbuf)
     (if (string= "No traceback available" (buffer-substring 1 23))
-        (message "No traceback available!")
+        (message "No traceback available")
       (ess-dirs)
       (goto-char (point-min))
                                         ;(setq font-lock-defaults '(ess-R-mode-font-lock-keywords)) :todo: solve font-lock
@@ -257,6 +257,7 @@ You can bound 'no-select' versions of this commands  for convenience:
     ;;   (ess-dbg-goto-current-debug-position)
     ;;   )
 )
+
 (defun ess-tb-next-error-function (n &optional reset)
     "Advance to the next error message and visits the file.
 This is the value of `next-error-function' in iESS buffers."
@@ -268,12 +269,13 @@ This is the value of `next-error-function' in iESS buffers."
            ;;                         (error "Current buffer has no process")))
            (last 1) timestamp
            (n (or n 1))
-           (beg-pos (if (and (>= n 0)
-                             (comint-after-pmark-p))  ;(< (point) (process-mark proc)))
-                        ess-tb-last-input
-                      (point)
-                      )
-                    )
+           (beg-pos  ; from where the search for next error starts
+            (if (and (>= n 0)
+                     (comint-after-pmark-p))
+                ess-tb-last-input
+              (point)
+              )
+            )
            (loc (condition-case err
                     (compilation-next-error n  nil beg-pos)
                   (error
@@ -303,6 +305,10 @@ This is the value of `next-error-function' in iESS buffers."
                    ;; There may be no timestamp info if the loc is a `fake-loc'.
                    ;; So we skip the time-check here, although we should maybe
                    ;; change `compilation-fake-loc' to add timestamp info.
+                   (nth 4 loc)          ;++
+                                        ; VS: here  4th loc is always nil,  and changes are not recoreded
+                                        ; can't figure out when the markers (3rd loc) and timestamps (4th loc) are set
+                                        ; so recalculate if 4th loc is nil.
                    (or (null (nth 4 loc))
                        (equal (nth 4 loc)
                               (setq timestamp
@@ -802,7 +808,7 @@ of the ring."
   (interactive)
   "Inserts point-marker into the input-ring."
   (ring-insert ess-dbg-input-ring (point-marker))
-  (message "Inserted into the input-ring")
+  (message "Point inserted into the input-ring")
 )
 
 (defun ess-debug (&optional arg)
