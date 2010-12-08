@@ -1,8 +1,9 @@
-### Test errors and patterns the regexps are build for
+### Error patersn in R:
 
-sdfsdf#sdfsf 4343 
+###_ TRACEBACK
+sdfsdf#sdfsf 4343
 8: as.array(rv1) at master_pbm.R#58
-sdfsf 
+sdfsf
 7: eval(expr, envir, enclos) at pbm_funcs.R#337
 6: eval(ue_chebuild.rv_ll_st.dim) at pbm_funcs.R#337
 5: eval(expr, envir, enclos) at pbm_funcs.R#337
@@ -12,20 +13,20 @@ sdfsf
 eval(ue_BUILD)
 eval(ue_VALIDATE)
 }, envir = bcell) at pbm_funcs.R#336
-1: bcell(name = "DATA", prototype = .M$dc, LUR = .p(parent = LUR, 
-ix = ixDM, ix_dim = 1), beta = .p(parent = beta, ix = rep.int(1L, 
-length(ixDM)), ix_dim = 1L), st = as.matrix(data$dD[, 1:2]), 
+1: bcell(name = "DATA", prototype = .M$dc, LUR = .p(parent = LUR,
+ix = ixDM, ix_dim = 1), beta = .p(parent = beta, ix = rep.int(1L,
+length(ixDM)), ix_dim = 1L), st = as.matrix(data$dD[, 1:2]),
 ll = rep.int(-Inf, length(ixDM)), rv = c(1, 1))
 0:
 
 
-Error in source(file = "/home/vitoshka/Dropbox/works/pbm/master_pbm.R") : 
+###_ SOURCE (UNEXPECTED SYMBOL)
+Error in source(file = "/home/vitoshka/Dropbox/works/pbm/master_pbm.R") :
  /home/vitoshka/Dropbox/works/pbm/master_pbm.R:494:15: unexpected symbol
 
 Error in source(file = "/home/vitoshka/Dropbox/works/pbm/master_pbm.R") : /home/vitoshka/Dropbox/works/pbm/master_pbm.R:494:15: unexpected symbol
 
-
-# RECOVER:
+###_ RECOVER:
 
 1: BC(name = "DATA", prototype = .M$dc, LUR = .p(parent = LUR, ix = ixDM, ix_dim = 1), beta = .p(parent = beta, ix = rep.int(1, length(ixDM)), ix_dim = 1)
 2: pbm_funcs.R#403: evalq(.e(q0_INIT.C), envir = bcell)
