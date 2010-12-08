@@ -3,8 +3,8 @@ function (formula, data, subset, weights, na.action, method = "qr",
           model = TRUE, x = FALSE, y = FALSE, qr = TRUE, singular.ok = TRUE,
           contrasts = NULL, offset, ...)
 {
-    ret.x <- x
-    ret.y <- y,,
+    ret.x <- x,
+    ret.y <- y
     cl <- match.call()
     mf <- match.call(expand.dots = FALSE)
     m <- match(c("formula", "data", "subset", "weights", "na.action",
