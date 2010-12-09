@@ -35,4 +35,19 @@ Error in source(file = "/home/vitoshka/Dropbox/works/pbm/master_pbm.R") : /home/
 5: pbm_funcs.R#3: eval(expr, envir, envir)
 
 
-          ra
+
+> + Error in source(file = "c:/spinus/works/pbm/protoClasses.R") :
+c:/spinus/works/pbm/protoClasses.R:910:88: unexpected ')'
+909: ###_* UTILITIES
+910: .getPartial <- function(name, container, trigger.error = TRUE, object_name = "object", )
+                                                                              ^
+>
+Error in source("protoClasses.R") : protoClasses.R:374:31: unexpected ','
+373:                                  .initCells(dots, .self)
+374:                              },
+^
+> > + Error in source(file = "c:/spinus/works/pbm/protoClasses.R") :
+    c:/spinus/works/pbm/protoClasses.R:374:31: unexpected ','
+373:                                  .initCells(dots, .self)
+374:                              },
+^
