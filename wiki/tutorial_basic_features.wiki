@@ -1,13 +1,13 @@
-#summary A tutorial demonstrating ess-tracebug features.
+<wiki:toc max_depth="3" />
 
-== Errors While Sourcing ==
-It is assumed for what follows that the key bindings and the configuration are as suggested on the main page
-http://code.google.com/p/ess-tracebug/ and the `ess-traceback` and `ess-debug` modes are turned on.
+In what follows it is assumed that the key bindings and the configuration are as suggested on the [http://code.google.com/p/ess-tracebug/ main page] and the `ess-traceback` and `ess-debug` modes are turned on.
+
+== Sourcing Errors ==
 
 Download the [http://ess-tracebug.googlecode.com/svn/trunk/test.R `test.R`] file from the repository.  It contains
 one function, `lm_test`, with an erroneous "," at line 6.
 
-Open `test.R` file and press M-c s (or just source it explicitly with source("test.R")), you should get an error
+Open `test.R`  and press M-c s (or just source it explicitly with `source("test.R")`), you should get an error
 `unexpected ','`  with the reference to the error position highlighted:
 
 http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png
@@ -21,7 +21,7 @@ next-error-no-select capabilities which you get in compilation, grep
 and occur modes, and should be familiar to many of ESS users.
 
 
-== The Debugging ==
+== Interactive Debugger ==
 
 Correct the  ","  error in the test.R and place the break-point (M-c b) at
 some arbitrary position.
@@ -50,7 +50,7 @@ into easy mode.
 Easy-key-mode is entered automatically whenever the debugger starts from a non-iESS buffer. In iESS it is often
 desirable to have the default behavior.
 
-== The Traceback Buffer ==
+== Traceback Buffer ==
 
 After an error occurred, press `M-c '` (back-tick) to open the `*ess-traceback*` buffer:
 
@@ -60,7 +60,7 @@ It displays the complete call stack and the most recent error with the reference
 
 With the suggested default configuration, `n` and `p` navigate through the call-stack source positions without selecting the source buffer. Press `RET` to go to the source or `q` to quit.
 
-== The Work-Flow ==
+== Work-Flow ==
 
 With a big projects I always want to jump quickly to the focal point of my
 analysis. This is where I source all the project files and execute
@@ -74,4 +74,3 @@ When you execute M-c i the current position is  inserted into the
 `ess-debug-ring`. Usually it is the place when you correct the error. So it's a focal
 point in the source code. You can jump through the debug-ring with M-c d d d D D
 d....
-
