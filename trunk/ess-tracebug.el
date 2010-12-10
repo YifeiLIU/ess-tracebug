@@ -52,10 +52,94 @@
 ;;; Code:
 
 (defgroup ess-tracebug nil
-  "Traceback and debug facilities for ess (currently tested only with R)."
+  "Error navigation and debug facilities for ESS."
   :link '(emacs-library-link :tag "Source Lisp File" "ess-tracebug.el")
   :group 'ess
   )
+
+(defvar ess-tracebug-indicator " TB"
+  "String to be displayed in mode-line alongside the process
+  name. Indicates that ess-traceback-mode is turned on. "
+)
+
+(defvar ess-tracebug-p nil
+  "Non nil if ess-tracebug is turned on for current process.
+Use `ess-tracebug' function to toggle this variable")
+(make-variable-buffer-local 'ess-tracebug-p)
+(add-to-list 'minor-mode-alist '(ess-tracebug-p ess-tracebug-indicator))
+
+(defcustom ess-tracebug-command-prefix "\M-c"
+  "*Key to be used as prefix in ess-debug command key bindings.
+
+The postfix keys are defined in `ess-tracebug-map'.
+The overwritten binding is `capitalize-word' and is bound to 'M-c M-c'.
+You can set this to \"M-t\" for example,  which would rebind the
+default binding `transpose-words'. In this case make sure to
+rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
+  :type 'string
+  :group 'ess-tracebug)
+
+(defvar ess-tracebug-map
+  (let ((map (make-sparse-keymap)))
+    (define-prefix-command 'map)
+    (define-key map "`" 'ess-show-R-traceback)
+    (define-key map "i" 'ess-dbg-goto-input-point)
+    (define-key map "I" 'ess-dbg-insert-in-input-ring)
+    (define-key map "d" 'ess-dbg-goto-debug-point)
+    (define-key map "b" 'ess-bp-set)
+    (define-key map "t" 'ess-bp-toggle-state)
+    (define-key map "k" 'ess-bp-kill)
+    (define-key map "K" 'ess-bp-kill-all)
+    (define-key map "\C-n" 'ess-bp-next)
+    (define-key map "\C-p" 'ess-bp-previous)
+    (define-key map "e" 'ess-dbg-toggle-error-action)
+    (define-key map "c" 'ess-dbg-easy-command)
+    (define-key map "n" 'ess-dbg-easy-command)
+    (define-key map "p" 'ess-dbg-easy-command)
+    (define-key map "q" 'ess-dbg-easy-command)
+    (define-key map "u" 'ess-dbg-easy-command)
+    (define-key map "s" 'ess-dbg-source-curent-file)
+    (define-key map "\M-c" 'capitalize-word)
+    map)
+  "Keymap used as a binding for `ess-tracebug-command-prefix' key
+ in ESS and iESSmode."
+  )
+
+
+(defun ess-tracebug (&optional arg)
+  "Toggle ess-tracebug mode.
+With arg, turn ess-tracebug mode on if and only if arg is
+positive.
+
+This mode adds to ESS the interactive debugging, breakpoint and
+error navigation functionality.  Strictly speaking ess-tracebug
+is not a minor mode. It integrates globally into ESS and iESS.
+
+The functionality in ess-tracebug is divided on conceptual
+grounds in tracing and debugging and could be
+activated/deactivate separately with `ess-traceback' and
+`ess-debug' respectively.
+"
+  (interactive "P")
+  (ess-force-buffer-current "R process to activate the tracebug mode: ")
+  (with-current-buffer (process-buffer (get-process ess-local-process-name))
+    (setq arg
+          (if arg
+              (prefix-numeric-value arg)
+            (if ess-tracebug-p -1 1)))
+    (if (> arg 0)
+        (progn
+          (ess-tb-start)
+          (ess-dbg-start)
+          (message "ESS-tracebug mode enabled")
+          )
+      (ess-tb-stop)
+      (ess-dbg-stop)
+      (message "ESS-tracebug mode desabled")
+      )
+    )
+  )
+
 
 ;;;_* TRACEBACK
 
@@ -108,10 +192,10 @@
   "Marker pointing to the last user input position in iESS buffer.
 This is the place where `ess-tb-last-input-overlay' is moved.
 Local in iESS buffers with `ess-traceback' mode enabled.")
+
 (defcustom inferior-ess-split-long-prompt t
   "If non-nil, long prompt '>>>>>>>>++++> ' will be split."
   :group 'ess-traceback)
-
 
 ;; (defvar  ess-traceback-minor-mode-map
 ;;   (let ((map (make-sparse-keymap)))
@@ -146,6 +230,39 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
   (interactive "P")
   (print (> (prefix-numeric-value arg) 0)))
 
+(defun ess-tb-start ()
+  "Start traceback session (assumes the process buffer being current buffer)"
+  (make-local-variable 'compilation-error-regexp-alist)
+  (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
+  (compilation-setup t)
+  (setq next-error-function 'ess-tb-next-error-function)
+  (make-local-variable 'ess-tb-last-input)
+  (make-local-variable 'ess-tb-last-input-overlay)
+  (save-excursion
+    (goto-char comint-last-input-start)
+    (setq ess-tb-last-input (point))
+    (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
+    )
+  (ad-activate 'ess-eval-region)
+  ;; (ad-activate 'ess-eval-linewise)
+  (ad-activate 'inferior-ess-send-input)
+  (setq ess-tracebug-p t)
+)
+
+(defun ess-tb-stop ()
+  "Start traceback session (assumes the process buffer being the current buffer)"
+  (ad-deactivate 'inferior-ess-send-input)
+  (ad-deactivate 'ess-eval-region)
+  ;; (ad-deactivate 'ess-eval-linewise)
+  (delete-overlay ess-tb-last-input-overlay)
+  (kill-local-variable 'ess-tb-last-input-overlay)
+  (kill-local-variable 'ess-tb-last-input)
+  (font-lock-remove-keywords nil (compilation-mode-font-lock-keywords))
+  (font-lock-fontify-buffer)
+  (kill-local-variable 'compilation-error-regexp-alist)
+  (setq ess-tracebug-p nil)
+  )
+
 (defun ess-traceback (&optional arg)
   "Toggle ess-traceback mode.
 With ARG, turn ess-traceback mode on in the current iESS buffer,
@@ -155,47 +272,22 @@ buffers. Particularly the keys \\[next-error] and
 \\[previous-error] could be used to navigate to next/previous
 errors.  See `compilation-mode'."
   (interactive "P")
-  (if arg
-      (setq arg (prefix-numeric-value arg)))
+  (when arg
+    (setq arg (prefix-numeric-value arg)))
   (ess-force-buffer-current "R process to activate the traceback-mode: ")
   (with-current-buffer (process-buffer (get-process ess-local-process-name))
     (unless arg
-      (setq arg (if ess-traceback-p -1 1)))
+      (setq arg (if ess-tracebug-p -1 1)))
     (if (> arg 0)
-        ;; activate the mode
         (progn
-          (make-local-variable 'compilation-error-regexp-alist)
-          (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
-          (compilation-setup t)
-          (setq next-error-function 'ess-tb-next-error-function)
-          (make-local-variable 'ess-tb-last-input)
-          (make-local-variable 'ess-tb-last-input-overlay)
-          (save-excursion
-            (goto-char comint-last-input-start)
-          (setq ess-tb-last-input (point))
-          (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
-          )
-          (ad-activate 'ess-eval-region)
-          ;; (ad-activate 'ess-eval-linewise)
-          (ad-activate 'inferior-ess-send-input)
-          (setq ess-traceback-p t)
+          (ess-tb-start)
           (message "ESS-traceback mode enabled")
           )
-      ;; else deactivate
-      (ad-deactivate 'inferior-ess-send-input)
-      (ad-deactivate 'ess-eval-region)
-      ;; (ad-deactivate 'ess-eval-linewise)
-      (delete-overlay ess-tb-last-input-overlay)
-      (kill-local-variable 'ess-tb-last-input-overlay)
-      (kill-local-variable 'ess-tb-last-input)
-      (font-lock-remove-keywords nil (compilation-mode-font-lock-keywords))
-      (font-lock-fontify-buffer)
-      (kill-local-variable 'compilation-error-regexp-alist)
-      (setq ess-traceback-p nil)
+      (ess-tb-stop)
       (message "ESS-traceback mode desabled")
       )
     )
-)
+  )
 
 (defvar ess-R-tb-regexp-alist '(R R3 R-recover)
   "List of symbols which are looked up in `compilation-error-regexp-alist-alist'.")
@@ -516,7 +608,6 @@ Elements should be directory names, not file names of directories.
   "This is t in ess.dbg buffers.")
 (make-variable-buffer-local 'ess-dbg-buf-p)
 
-
 (defvar ess-dbg-current-debug-position (make-marker)
   "Marker to the current debugged line.
  It always point to the
@@ -602,18 +693,6 @@ Active debug states are usually those, in which prompt start with Browser[d]> ."
   :type 'string)
 
 
-(defcustom ess-tb-indicator " TB"
-  "String to be displayed in mode-line alongside the process
-  name. Indicates that ess-traceback-mode is turned on. "
-  :group 'ess-debug
-  :type 'string)
-
-(defvar ess-traceback-p nil
-  "Non nil if traceback is active.
-Use ess-traceback function to toggle this variable")
-(make-variable-buffer-local 'ess-traceback-p)
-(add-to-list 'minor-mode-alist '(ess-traceback-p ess-tb-indicator))
-
 (defcustom ess-dbg-ask-for-file nil
   "If non nil, ask for file
 if the current debug reference is not find. If nil, the currently
@@ -626,44 +705,6 @@ seconds."
   "Local in every iESS buffer with the debuger enabled. It's
   value is the associate *ess.dbg* buffer.")
 (make-variable-buffer-local 'ess-dbg-buffer)
-
-(defcustom ess-debug-command-prefix "\M-c"
-  "*Key to be used as prefix in ess-debug command key bindings.
-
-The postfix keys are defined in `ess-debug-map'.
-The overwritten binding is `capitalize-word' and is bound to 'M-c M-c'.
-You can set this to \"M-t\" for example,  which would rebind the
-default binding `transpose-words'. In this case make sure to
-rebind `M-t` to transpose-words command in the `ess-debug-map'."
-  :type 'string
-  :group 'ess-debug)
-
-;(makunbound 'ess-debug-map)
-(defvar ess-debug-map
-  (let ((map (make-sparse-keymap)))
-    (define-prefix-command 'map)
-    (define-key map "`" 'ess-show-R-traceback)
-    (define-key map "i" 'ess-dbg-goto-input-point)
-    (define-key map "I" 'ess-dbg-insert-in-input-ring)
-    (define-key map "d" 'ess-dbg-goto-debug-point)
-    (define-key map "b" 'ess-bp-set)
-    (define-key map "t" 'ess-bp-toggle-state)
-    (define-key map "k" 'ess-bp-kill)
-    (define-key map "K" 'ess-bp-kill-all)
-    (define-key map "\C-n" 'ess-bp-next)
-    (define-key map "\C-p" 'ess-bp-previous)
-    (define-key map "e" 'ess-dbg-toggle-error-action)
-    (define-key map "c" 'ess-dbg-easy-command)
-    (define-key map "n" 'ess-dbg-easy-command)
-    (define-key map "p" 'ess-dbg-easy-command)
-    (define-key map "q" 'ess-dbg-easy-command)
-    (define-key map "u" 'ess-dbg-easy-command)
-    (define-key map "s" 'ess-dbg-source-curent-file)
-    (define-key map "\M-c" 'capitalize-word)
-    map)
-  "Keymap used as a binding for `ess-debug-command-prefix' key
- in ESS and iESSmode."
-  )
 
 (defvar ess-debug-easy-map
   (let ((map (make-sparse-keymap)))
@@ -816,22 +857,23 @@ of the ring."
   "Toggle ess-debug mode.
 With arg, turn ess-debug mode on if and only if arg is positive.
 This mode adds to ESS the interactive debugging and breakpoints.
-Strictly speaking ess-debug is not a minor mode. It integrates
-into ESS and iESS modes, providing global functionality.
+Strictly speaking ess-debug is not a minor mode. Integrates into
+ESS and iESS modes by binding `ess-tracebug-map' to
+`ess-tracebug-command-prefix' in `ess-mode-map' and `inferior-ess-mode-map' respectively.
 "
   (interactive)
   (ess-force-buffer-current "Process to activate/deactivate the debuger: ")
   (if (number-or-marker-p arg)
       (if (>= arg 0)
-          (ess-dbg-start-session)
-        (ess-dbg-end-session)
+          (ess-dbg-start)
+        (ess-dbg-stop)
         )
     (if (local-variable-p 'ess-dbg-buffer (process-buffer (get-process ess-current-process-name)))
-        (ess-dbg-end-session)
-      (ess-dbg-start-session)
+        (ess-dbg-stop)
+      (ess-dbg-start)
       )))
 
-(defun ess-dbg-start-session ()
+(defun ess-dbg-start ()
   "Start the debug session."
   (interactive)
   (let ((dbuff (get-buffer-create (concat ess-dbg-output-buf-prefix "." ess-current-process-name "*")))
@@ -867,12 +909,12 @@ into ESS and iESS modes, providing global functionality.
       (toggle-read-only t)
       (message "Started debug session successfully")
       )
-    (define-key ess-mode-map ess-debug-command-prefix ess-debug-map)
-    (define-key inferior-ess-mode-map ess-debug-command-prefix ess-debug-map)
+    (define-key ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
+    (define-key inferior-ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
     )
   )
 
-(defun ess-dbg-end-session ()
+(defun ess-dbg-stop ()
   "End the debug session.
 Kill the *ess.dbg.[R_name]* buffer."
   (interactive)
@@ -894,8 +936,8 @@ Kill the *ess.dbg.[R_name]* buffer."
       (message "Finished debug session")
       )
     )
-  (define-key ess-mode-map ess-debug-command-prefix nil)
-  (define-key inferior-ess-mode-map ess-debug-command-prefix nil)
+  (define-key ess-mode-map ess-tracebug-command-prefix nil)
+  (define-key inferior-ess-mode-map ess-tracebug-command-prefix nil)
   )
 
 
