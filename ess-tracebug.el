@@ -642,6 +642,7 @@ rebind `M-t` to transpose-words command in the `ess-debug-map'."
 (defvar ess-debug-map
   (let ((map (make-sparse-keymap)))
     (define-prefix-command 'map)
+    (define-key map "`" 'ess-show-R-traceback)
     (define-key map "i" 'ess-dbg-goto-input-point)
     (define-key map "I" 'ess-dbg-insert-in-input-ring)
     (define-key map "d" 'ess-dbg-goto-debug-point)
