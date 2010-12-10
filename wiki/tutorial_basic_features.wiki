@@ -1,3 +1,4 @@
+#labels Featured
 <wiki:toc max_depth="3" />
 
 In what follows it is assumed that the key bindings and the configuration are as suggested on the [http://code.google.com/p/ess-tracebug/ main page] and the `ess-traceback` and `ess-debug` modes are turned on.
