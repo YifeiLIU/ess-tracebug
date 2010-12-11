@@ -47,11 +47,12 @@ Immediately after entering the interactive debugging  start pressing n,n,n... to
 the easy-key-mode in which n,q,c do what usually n,Q,c do in R buffer. Any other event
 triggers the exit from easy-key-mode and it is passed down the emacs command loop.
 
-At any time you can execute the same basic commands with M-c c , M-c n ,M-c q , which also will place the debugger
-into easy mode.
-
-Easy-key-mode is entered automatically whenever the debugger starts from a non-iESS buffer. In iESS it is often
+At any time you can execute these commands with M-c c , M-c n ,M-c q , which also place the debugger into "easy key mode". "Easy key mode" is entered automatically whenever the debugger starts from a non-iESS buffer. In iESS it is often
 desirable to have the default behavior.
+
+== Breakpoints ==
+
+Try placing multiple breakpoints in the buffer. Toggle their state (M-c t) and kill them (M-c k). These operations apply to the closest breakpoint to the cursor in the visible area of the buffer.
 
 == Traceback Buffer ==
 
