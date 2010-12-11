@@ -13,7 +13,7 @@ one function, `lm_test`, with an erroneous "," at line 6.
 Open `test.R`  and press M-c s (or just source it explicitly with `source("test.R")`), you should get an error
 `unexpected ','`  with the reference to the error position highlighted:
 
-http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png
+<img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png" widht=500 >
 
 With M-] from test.R (`next-error`) or from iESS buffer (`next-error-no-select`) you can jump directly to the error
 location and the error position will be highlighted for `next-error-highlight` or `next-error-no-select` seconds
@@ -41,7 +41,7 @@ Execute the above code interactively.
 You should be brought to the break-point in the `test.R` file. Fringe must display a small triangle and the current
 line must be highlighted: 
 
-http://ess-tracebug.googlecode.com/svn/trunk/img/tut2_break_point.png
+<img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut2_break_point.png" width = 500>
 
 Immediately after entering the interactive debugging  start pressing n,n,n... to jump through you code. This is
 the easy-key-mode in which n,q,c do what usually n,Q,c do in R buffer. Any other event
@@ -57,7 +57,7 @@ desirable to have the default behavior.
 
 After an error occurred, press {{{[M-c `]}}} (back-tick) to open the `*ess-traceback*` buffer:
 
-http://ess-tracebug.googlecode.com/svn/trunk/img/tut3_traceback.png
+<img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut3_traceback.png" width=500>
 
 It displays the complete call stack and the most recent error with the references to the source file positions highlighted.
 
