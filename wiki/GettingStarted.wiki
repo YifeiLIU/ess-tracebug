@@ -55,7 +55,7 @@ desirable to have the default behavior.
 
 == Traceback Buffer ==
 
-After an error occurred, press `M-c '` (back-tick) to open the `*ess-traceback*` buffer:
+After an error occurred, press {{{[M-c `]}}} (back-tick) to open the `*ess-traceback*` buffer:
 
 http://ess-tracebug.googlecode.com/svn/trunk/img/tut3_traceback.png
 
