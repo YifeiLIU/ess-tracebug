@@ -13,7 +13,7 @@ one function, `lm_test`, with an erroneous "," at line 6.
 Open `test.R`  and press M-c s (or just source it explicitly with `source("test.R")`), you should get an error
 `unexpected ','`  with the reference to the error position highlighted:
 
-<img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png" widht=500 >
+<img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png" width=500 >
 
 With M-] from test.R (`next-error`) or from iESS buffer (`next-error-no-select`) you can jump directly to the error
 location and the error position will be highlighted for `next-error-highlight` or `next-error-no-select` seconds
