@@ -102,13 +102,13 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
     (define-key map "\M-c" 'capitalize-word)
     map)
   "Keymap used as a binding for `ess-tracebug-command-prefix' key
- in ESS and iESSmode."
+ in ESS and iESS mode."
   )
 
 
 (defun ess-tracebug (&optional arg)
   "Toggle ess-tracebug mode.
-With arg, turn ess-tracebug mode on if and only if arg is
+With ARG, turn ess-tracebug mode on if and only if ARG is
 positive.
 
 This mode adds to ESS the interactive debugging, breakpoint and
@@ -131,11 +131,11 @@ activated/deactivate separately with `ess-traceback' and
         (progn
           (ess-tb-start)
           (ess-dbg-start)
-          (message "ESS-tracebug mode enabled")
+          (message "ess-tracebug mode enabled")
           )
       (ess-tb-stop)
       (ess-dbg-stop)
-      (message "ESS-tracebug mode desabled")
+      (message "ess-tracebug mode disabled")
       )
     )
   )
@@ -281,10 +281,10 @@ errors.  See `compilation-mode'."
     (if (> arg 0)
         (progn
           (ess-tb-start)
-          (message "ESS-traceback mode enabled")
+          (message "ess-traceback mode enabled")
           )
       (ess-tb-stop)
-      (message "ESS-traceback mode desabled")
+      (message "ess-traceback mode disabled")
       )
     )
   )
@@ -439,8 +439,8 @@ This is the value of `next-error-function' in iESS buffers."
 
 ;;;_ + ADVICING
 ;;; (needed to implement the last user input functionality)
-;;; redefining eval-region is needed to avoid messing the debugger.
-;;; New version flushes all blank lines and trailing \n's.
+;;; Complete redefining of  eval-region is needed to avoid messing the debugger.
+;;; New eval-region  flushes all blank lines and trailing \n's.
 (defun ess-eval-region (start end toggle &optional message)
   "Send the current region to the inferior ESS process.
 With prefix argument toggle the meaning of `ess-eval-visibly-p';
@@ -786,6 +786,7 @@ The list of actions are specified in `ess-dbg-error-action-alist'."
   ;; overlay-arrow stays, to indicate the last debugged position!!
   )
 
+;;;_ + Work Flow
 (defun ess-dbg-goto-input-point ()
   "Jump to the last input point.
 
@@ -860,17 +861,28 @@ This mode adds to ESS the interactive debugging and breakpoints.
 Strictly speaking ess-debug is not a minor mode. Integrates into
 ESS and iESS modes by binding `ess-tracebug-map' to
 `ess-tracebug-command-prefix' in `ess-mode-map' and `inferior-ess-mode-map' respectively.
+
+Note: you should use this command only if you wish to have only
+debug functionality enabled and not tracing one.
 "
   (interactive)
   (ess-force-buffer-current "Process to activate/deactivate the debuger: ")
   (if (number-or-marker-p arg)
       (if (>= arg 0)
-          (ess-dbg-start)
+          (progn
+            (ess-dbg-start)
+            (message "Started debug session successfully")
+            )
         (ess-dbg-stop)
+        (message "Finished debug session")
         )
     (if (local-variable-p 'ess-dbg-buffer (process-buffer (get-process ess-current-process-name)))
-        (ess-dbg-stop)
+        (progn
+          (ess-dbg-stop)
+          (message "Finished debug session")
+          )
       (ess-dbg-start)
+      (message "Started debug session successfully")
       )))
 
 (defun ess-dbg-start ()
@@ -907,7 +919,6 @@ ESS and iESS modes by binding `ess-tracebug-map' to
       (beginning-of-line)
       (set-process-filter proc 'inferior-ess-dbg-output-filter)
       (toggle-read-only t)
-      (message "Started debug session successfully")
       )
     (define-key ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
     (define-key inferior-ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
@@ -933,7 +944,6 @@ Kill the *ess.dbg.[R_name]* buffer."
       (kill-local-variable 'ess-dbg-active-p)
       (set-process-filter proc 'inferior-ess-output-filter)
       (setq mode-line-process '(" [" ess-local-process-name "] %s"))
-      (message "Finished debug session")
       )
     )
   (define-key ess-mode-map ess-tracebug-command-prefix nil)
