@@ -1017,7 +1017,9 @@ debugging state puts the output in *ess.dbg* buffer"
       (setq dactive t)
       )
     (inferior-ess-output-filter proc string)
-    (when (and match-skip (not is-iess))
+    (when (and match-skip
+                ; (not is-iess))  ; uncomment not to enter easy key mode in iESS
+               )
       (ess-dbg-easy-command t))
     )
   )
