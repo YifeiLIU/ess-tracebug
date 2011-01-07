@@ -1,3 +1,5 @@
+* TODO conditional breakpoints
+* TODO watch window
 * TODO make ess-eval-region insert the source
 * TODO debug/undebug at point
 * TODO implement the "u" command
