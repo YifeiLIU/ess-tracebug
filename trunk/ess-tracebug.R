@@ -28,22 +28,21 @@ is(m, "MethodDefinition")
 if(!exists(".ess_watch_expressions") || length(.ess_watch_expressions) == 0){
     assign(".ess_watch_expressions", list(Exmaple = expression("Empty watch list!")), envir = globalenv())
 }
-if(!exists(".ess_watch_execute")){
-    .ess_watch_execute <- function(){
+
+.ess_watch_eval <-
+    function(){
         .essWEnames <- allNames(.ess_watch_expressions)
         len0p <- !nzchar(.essWEnames)
         .essWEnames[len0p] <- seq_along(len0p)[len0p]
         for(i in seq_along(.ess_watch_expressions)){
-            cat("\n@---- ", .essWEnames[[i]], " ", rep.int("-", max(0, 30 - length(.essWEnames[[i]]))), "@\n", sep = "")
-            cat( paste("@---> ", deparse(.ess_watch_expressions[[i]][[1]])), " \n", sep = "")
+            cat("@---- ", .essWEnames[[i]], " ", rep.int("-", max(0, 30 - nchar(.essWEnames[[i]]))), "@", sep = "")
+            cat( paste("@--->", deparse(.ess_watch_expressions[[i]][[1L]])), " ", sep = "")
             tryCatch(print(eval(.ess_watch_expressions[[i]])),
-                     error = function(e) cat("Error:", e$message, "\n" ),
-                     warning = function(w) cat("warning: ", w$message, "\n"))
+                     error = function(e) cat("Error:", e$message, "" ),
+                     warning = function(w) cat("warning: ", w$message, ""))
         }
     }
-}
-.ess_watch_execute()
-
+.ess_watch_eval()
 
 
 
