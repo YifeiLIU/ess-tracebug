@@ -1,25 +1,40 @@
+(defvar ess-watch-inject-command
+  "
+assign(\".ess_watch_eval\", function(){
+    if(!exists(\".ess_watch_expressions\")){
+        assign(\".ess_watch_expressions\", list(), envir = .GlobalEnv)
+    }
+    if(length(.ess_watch_expressions) == 0L){
+        cat(\"\n# Watch list is empty!\n
+# a/i     append/insert new expression
+# k       kill
+# e       edit the expression
+# r       rename
+# n/p     navigate
+# u/U     move the expression up/down
+# q       kill the buffer
+\")
+    }else{
+        .parent_frame <- parent.frame()
+        .essWEnames <- allNames(.ess_watch_expressions)
+        len0p <- !nzchar(.essWEnames)
+        .essWEnames[len0p] <- seq_along(len0p)[len0p]
+        for(i in seq_along(.ess_watch_expressions)){
+            cat(\"\n@---- \", .essWEnames[[i]], \" \", rep.int(\"-\", max(0, 35 - nchar(.essWEnames[[i]]))), \"->\n\", sep = \"\")
+            cat( paste(\"@--->\", deparse(.ess_watch_expressions[[i]][[1L]])), \" \n\", sep = \"\")
+            tryCatch(print(eval(.ess_watch_expressions[[i]], envir = .parent_frame)),
+                     error = function(e) cat(\"Error:\", e$message, \"\n\" ),
+                     warning = function(w) cat(\"warning: \", w$message, \"\n\"))
+        }}
+}, envir = .GlobalEnv); environment(.ess_watch_eval)<-.GlobalEnv
+")
 
 (defvar ess-watch-command
 ;; assumes that every expression is a structure of length 1 as returned by parse.
-  "  if(!exists(\".ess_watch_expressions\") || length(.ess_watch_expressions) == 0){
-  assign(\".ess_watch_expressions\", list(Exmaple = expression(\"Empty watch list!\")), envir = globalenv())
-  }
-  .ess_watch_eval <- function(){
-  .essWEnames <- allNames(.ess_watch_expressions)
-  len0p <- !nzchar(.essWEnames)
-  .essWEnames[len0p] <- seq_along(len0p)[len0p]
-  for(i in seq_along(.ess_watch_expressions)){
-  cat(\"\n@---- \", .essWEnames[[i]], \" \", rep.int(\"-\", max(0, 30 - nchar(.essWEnames[[i]]))), \"@\n\", sep = \"\")
-  cat( paste(\"@--->\", deparse(.ess_watch_expressions[[i]][[1L]])), \" \n\", sep = \"\")
-  tryCatch(print(eval(.ess_watch_expressions[[i]])),
-                error = function(e) cat(\"Error:\", e$message, \"\n\" ),
-                warning = function(w) cat(\"warning: \", w$message, \"\n\"))
-  }
-  }
-  .ess_watch_eval()
-"
-  )
+".ess_watch_eval()\n")
 
+(define-fringe-bitmap 'current-watch-bar
+  [#b00001100] nil nil '(top t))
 
 (defun ess-watch-mode ()
   "Major mode for output from `ess-rdired'.
@@ -27,22 +42,28 @@
 list of current objects in the current environment, one-per-line.  You
 can then examine these objects, plot them, and so on.
 \\{ess-rdired-mode-map}"
-  (let ((cur-block ess-watch-current-block))
+  (let ((cur-block (max 1 (ess-watch-block-at-point)))
+        (dummy-string
+         (propertize "*df*" 'display '(left-fringe current-watch-bar font-lock-keyword-face)))
+        )
     (kill-all-local-variables )
     (make-local-variable 'revert-buffer-function)
     (setq revert-buffer-function 'ess-watch-revert-buffer)
     (use-local-map ess-watch-mode-map)
     (setq major-mode 'ess-watch-mode)
-    (setq ess-watch-current-block 1)
     (setq mode-name (concat "watch " ess-current-process-name))
     (setq font-lock-defaults
           '(inferior-ess-font-lock-keywords nil nil ((?' . "."))))
     (turn-on-font-lock)
     (setq ess-watch-current-block-overlay
           (make-overlay (point-min) (point-max)))
-    (overlay-put ess-watch-current-block-overlay
-                 'face  'ess-watch-current-block-face)
+    (overlay-put ess-watch-current-block-overlay 'line-prefix dummy-string)
+    (overlay-put ess-watch-current-block-overlay 'face 'ess-watch-current-block-face)
     (ess-watch-set-current cur-block) ;;
+    ;; scale the font
+;    (text-scale-mode -1) ;;restore to default
+    (setq text-scale-mode-amount ess-watch-scale-amount)
+    (text-scale-mode 1)
     ))
 
 (defun ess-watch ()
@@ -51,17 +72,11 @@ This is the main function.  See documentation for `ess-watch-mode' though
 for more information!"
   (interactive)
   (let ((wbuf (get-buffer-create ess-watch-buffer)))
-    (ess-watch-buffer-show wbuf) ;;ess-watch-buffer-show displays the wbuf in accordance to custom settings
-    (pop-to-buffer wbuf)
-    (setq buffer-read-only nil)
-    (ess-execute ess-watch-command nil
-                 (substring ess-watch-buffer 1 (- (length ess-watch-buffer) 1)))
-    ;; When definiting the function .watch.objects(), a "+ " is printed on the first line.
-    ;; these are deleted:
-    (goto-char (point-min))
-    (delete-region (point-at-bol) (+ 1 (point-at-eol)))
+    ;; (ess-watch-buffer-show wbuf) ;; arrange the  watch window  properly
+    (set-buffer wbuf)
     (ess-watch-mode)
-    (setq buffer-read-only t)
+    (ess-command ess-watch-inject-command) ;;fixme:bug:  why is this executed in *R* buffer?
+    (ess-watch-refresh-buffer-visibly wbuf) ;; evals the ess-command and displays the buffer if not visible
     )
   )
 
@@ -81,9 +96,7 @@ for more information!"
   (define-key ess-watch-mode-map "q" 'ess-watch-quit)
   (define-key ess-watch-mode-map "u" 'ess-watch-move-up)
   (define-key ess-watch-mode-map "U" 'ess-watch-move-down)
-  (define-key ess-watch-mode-map " " 'ess-watch-next-block)
   (define-key ess-watch-mode-map "n" 'ess-watch-next-block)
-  (define-key ess-watch-mode-map [backspace] 'ess-watch-previous-block)
   (define-key ess-watch-mode-map "p" 'ess-watch-previous-block)
   ;; R mode keybindings.
   (define-key ess-watch-mode-map "\C-c\C-s" 'ess-watch-switch-process)
@@ -93,14 +106,15 @@ for more information!"
   )
 
 (defface ess-watch-current-block-face
-  '((((class grayscale)
-      (background light)) (:background "DimGray"))
-    (((class grayscale)
-      (background dark))  (:background "LightGray"))
+  '(
+    ;; (((class grayscale)
+    ;;   (background light)) (:background "DimGray"))
+    ;; (((class grayscale)
+    ;;   (background dark))  (:background "LightGray"))
+    ;; (((class color)
+    ;;   (background light)) (:background "tan"))
     (((class color)
-      (background light)) (:background "tan"))
-    (((class color)
-      (background dark))  (:background "gray15"))
+      (background dark))  (:background "gray10"))
     )
   "Face used to highlight currently debugged line."
   :group 'ess-debug
@@ -109,10 +123,6 @@ for more information!"
 (defvar  ess-watch-current-block-overlay nil
   "The overlay for currently selected block in the R watch buffer .")
 (make-variable-buffer-local 'ess-watch-current-block-overlay)
-
-(defvar ess-watch-current-block 1
-  "Count of currently selected watch block.")
-(make-variable-buffer-local 'ess-watch-current-block)
 
 (defvar ess-watch-buffer "*R watch*"
   "Name of the watch buffer.")
@@ -125,20 +135,25 @@ for more information!"
 (defcustom ess-watch-start-expression "@--->"
   "String indicating the beginning of an R expression in watch buffer."
   :group 'ess-debug
-  :type 'string))
+  :type 'string)
 
-(defcustom ess-watch-height-threshold split-height-threshold
+(defcustom ess-watch-height-threshold 50
   "Minimum height for splitting R windwow sensibly to make space for watch window.
 Has exactly the same meaning and initial value as `split-height-threshold'."
   :group 'ess-debug
   :type 'integer)
 
-(defcustom ess-watch-width-threshold split-width-threshold
+(defcustom ess-watch-width-threshold 50
   "Minimum width for splitting R windwow sensibly to make space for watch window.
 Has exactly the same meaning and initial value as `split-width-threshold'."
   :group 'ess-debug
   :type 'integer)
 
+(defcustom  ess-watch-scale-amount -2
+  "The number of steps to scale the watch font down (up).
+Each step scales the height of the default face in the watch
+window by the variable `text-scale-mode-step' (a negative number
+of steps decreases the height by the same amount)")
 
 (defun ess-watch-block-limits-at-point ()
   "Return start and end positions of the watch block."
@@ -160,7 +175,7 @@ Has exactly the same meaning and initial value as `split-width-threshold'."
       (list start-pos end-pos)
       )))
 
-(defun ess-watch-block-number-at-point ()
+(defun ess-watch-block-at-point ()
   "return the current block's order count, 0 if no block was found."
   (save-excursion
     (let ((cur-point (point))
@@ -177,12 +192,11 @@ Has exactly the same meaning and initial value as `split-width-threshold'."
   (re-search-forward ess-watch-start-expression nil t nr)
   (goto-char (match-end 0))
   (apply 'move-overlay ess-watch-current-block-overlay (ess-watch-block-limits-at-point))
-  (setq ess-watch-current-block (ess-watch-block-number-at-point))
   )
 
 
 (defun ess-watch-make-alist ()
-  "Create an association list of expression from current watch buffer.
+  "Create an association list of expression from current buffer (better be a watch buffer).
 Each element of assoc list is of the form (pos name expr) where
 pos is an unique integer identifying watch blocks by position,
 name is a string giving the name of expression block, expr is a
@@ -224,7 +238,10 @@ ready to be send to R process. AL is an association list as return by `ess-watch
   ;; there is no other way to insert info into R's .ess_watch_expressions object'
   ;; !! assumes R watch being the current buffer, otherwise will most likely install empty list.
   (interactive)
-  (ess-eval-linewise (ess-watch-parse-assoc (ess-watch-make-alist)) t nil nil t)
+  (process-send-string (get-ess-process ess-current-process-name)
+                       (ess-watch-parse-assoc (ess-watch-make-alist)))
+  ;;todo: delete the prompt at the end of proc buffer todo: defun ess-process-send-string!!
+  (sleep-for 0.05)  ;; need here, if ess-command is used immediately after,  for some weird reason the process buffer will not be changed
   )
 
 (defun ess-watch-revert-buffer (ignore noconfirm)
@@ -233,29 +250,26 @@ Arguments IGNORE and NOCONFIRM currently not used."
   (ess-watch)
   (message "Watch reverted"))
 
-(defun ess-watch-refresh-buffer-visibly ()
-  "Eval `ess-watch-command' if `ess-watch-buffer'  exists, else do nothing.
-Is much more efficient than `ess-watch-revert-buffer', and don't
-switch to the buffer.
-If the buffer is not visible call `ess-watch-buffer-show' to make
-it visible.
-This function is intended for internal use during the debugging."
+(defun ess-watch-refresh-buffer-visibly (wbuf)
+  "Eval `ess-watch-command' and direct the output into the WBUF.
+Call `ess-watch-buffer-show' to make the buffer visible, without
+selecting it.  This function is primarily intended for refreshing
+the watch window during the debugging."
+  ;; assumes that the ess-watch-mode is on!!
+  ;; particularly ess-watch-current-block-overlay is installed
   (interactive)
-  (let ((wbuff (get-buffer ess-watch-buffer)))
-    (when wbuff
-      (ess-watch-buffer-show wbuff) ;; if visible do nothing
-      (with-current-buffer wbuff
-        (setq buffer-read-only nil)
-        (ess-command  ess-watch-command wbuff))
-        ;; delete the ++++++> line
-        (goto-char (point-min))
-        (delete-region (point-at-bol) (+ 1 (point-at-eol)))
-        (ess-watch-set-current ess-watch-current-block)
-        (setq buffer-read-only t)
-        )
-      )
-    )
-)
+  (ess-watch-buffer-show wbuf) ;; if visible do nothing
+  (with-current-buffer wbuf
+    (let ((curr-block (max 1 (ess-watch-block-at-point)))) ;;can be 0 if
+      (setq buffer-read-only nil)
+      (ess-command  ess-watch-command wbuf)
+      ;; delete the ++++++> line
+      (goto-char (point-min))
+      (delete-region (point-at-bol) (+ 1 (point-at-eol)))
+      (ess-watch-set-current curr-block)
+      (set-window-point (get-buffer-window wbuf) (point))
+      (setq buffer-read-only t)
+      )))
 
 (defun ess-watch-buffer-show (buffer-or-name)
   "This is the main function to make watch buffer BUFFER-OR-NAME visible.
@@ -278,8 +292,7 @@ respectively."
             (set-window-buffer win buffer-or-name)
           (display-buffer buffer-or-name) ;; resort to usual mechanism if could not split
           ))
-      ))
-  )
+      )))
 
 
 (defun ess-watch-quit ()
@@ -289,6 +302,9 @@ process. The only way to avoid the display is to kill the
 buffer."
   (interactive)
   (kill-buffer)
+  (unless (one-window-p)
+    (delete-window)
+    )
   )
 
 ;;;_ MOTION
@@ -298,11 +314,9 @@ Optional N if supplied gives the number of steps forward backward-char."
   (interactive "P")
   (setq n (prefix-numeric-value n))
   (goto-char (overlay-end ess-watch-current-block-overlay))
-  (if (re-search-forward ess-watch-start-expression nil t n)
-      (setq ess-watch-current-block (+ ess-watch-current-block n))
+  (unless (re-search-forward ess-watch-start-expression nil t n)
     (goto-char (point-min)) ;;circular but always moves to start!
     (re-search-forward ess-watch-start-expression nil t 1)
-    (setq ess-watch-current-block 1)
     )
   (apply 'move-overlay ess-watch-current-block-overlay (ess-watch-block-limits-at-point))
   )
@@ -319,7 +333,6 @@ Optional N if supplied gives the number of backward steps."
     )
   (goto-char (match-end 0))
   (apply 'move-overlay ess-watch-current-block-overlay (ess-watch-block-limits-at-point))
-  (setq ess-watch-current-block (ess-watch-block-number-at-point))
   )
 
 ;;;_ BLOCK MANIPULATION and EDITING
@@ -347,9 +360,8 @@ Optional N if supplied gives the number of backward steps."
     (insert name)
     (setq buffer-read-only t)
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly)
-    )
-  )
+    (ess-watch-refresh-buffer-visibly (current-buffer))
+    ))
 
 (defun ess-watch-edit-expression ()
   "Edit in the minibuffer the R expression from the current watch block. "
@@ -372,68 +384,63 @@ Optional N if supplied gives the number of backward steps."
     (insert expr)
     (setq buffer-read-only t)
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly)
-    )
-  )
+    (ess-watch-refresh-buffer-visibly (current-buffer))
+    ))
 
 (defun ess-watch-add ()
   "Ask for new R expression and name and append it to the end of the list of watch expressions"
   (interactive)
   (let (nr expr name)
     (goto-char (point-max))
-    (setq nr (number-to-string (1+ (ess-watch-block-number-at-point))))
-    (setq name (read-string (concat "Name (" nr "):") nil nil nr ))
+    (setq nr (number-to-string (1+ (ess-watch-block-at-point))))
+    (setq name nr)
+    ;; (setq name (read-string (concat "Name (" nr "):") nil nil nr ))  ;;this one is quite annoying and not really needed than for logging
     (setq expr (read-string "New expression: " nil nil "\"Empty watch!\""))
     (setq buffer-read-only nil)
     (insert (concat "\n" ess-watch-start-block " " name " -@\n" ess-watch-start-expression " " expr "\n"))
     (setq buffer-read-only t)
-    (setq ess-watch-current-block (ess-watch-block-number-at-point))
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly)
+    (ess-watch-refresh-buffer-visibly (current-buffer))
     ))
-
 
 (defun ess-watch-insert ()
   "Ask for new R expression and name and insert it in front of current watch block"
   (interactive)
   (let (nr expr name)
-    (setq nr (number-to-string (ess-watch-block-number-at-point)))
-    (re-search-backward ess-watch-start-block nil 1) ;;point-min if not found
-    (setq name (read-string (concat "Name (" nr "):") nil nil nr ))
+    (setq nr (number-to-string (ess-watch-block-at-point)))
+    (setq name nr)
+    ;; (setq name (read-string (concat "Name (" nr "):") nil nil nr ))
     (setq expr (read-string "New expression: " nil nil "\"Empty watch!\""))
+    (re-search-backward ess-watch-start-block nil 1) ;;point-min if not found
     (setq buffer-read-only nil)
     (insert (concat "\n" ess-watch-start-block " " name " -@\n" ess-watch-start-expression " " expr "\n"))
     (setq buffer-read-only t)
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly)
+    (ess-watch-refresh-buffer-visibly (current-buffer))
     ))
-
 
 (defun ess-watch-move-up ()
   "Move the current block up."
   (interactive)
-  (let ((nr (ess-watch-block-number-at-point))
+  (let ((nr (ess-watch-block-at-point))
         wbl)
     (when (> nr 1)
       (setq buffer-read-only nil)
       (setq wbl (apply 'delete-and-extract-region  (ess-watch-block-limits-at-point)))
       (re-search-backward ess-watch-start-block nil t 1) ;; current block was deleted, point is at the end of previous block
       (insert wbl)
-      (setq ess-watch-current-block (1- nr))
       (ess-watch-install-.ess_watch_expressions)
-      (ess-watch-refresh-buffer-visibly)
+      (ess-watch-refresh-buffer-visibly (current-buffer))
       (setq buffer-read-only t)
-      )
-    )
-  )
+      )))
 
 
 (defun ess-watch-move-down ()
   "Move the current block down."
   (interactive)
-  (let ((nr (ess-watch-block-number-at-point))
+  (let ((nr (ess-watch-block-at-point))
         (nr-all (save-excursion (goto-char (point-max))
-                                (ess-watch-block-number-at-point)))
+                                (ess-watch-block-at-point)))
         wbl)
     (when (< nr nr-all)
       (setq buffer-read-only nil)
@@ -442,13 +449,10 @@ Optional N if supplied gives the number of backward steps."
       (when (re-search-forward ess-watch-start-block nil 1 1) ;; current block was deleted, point is at the end of previous block or point-max
         (goto-char (match-beginning 0)))
       (insert wbl)
-      (setq ess-watch-current-block (1+ nr))
       (ess-watch-install-.ess_watch_expressions)
-      (ess-watch-refresh-buffer-visibly)
+      (ess-watch-refresh-buffer-visibly (current-buffer))
       (setq buffer-read-only t)
-      )
-    )
-  )
+      )))
 
 (defun ess-watch-kill ()
   "Kill the current block"
@@ -456,5 +460,5 @@ Optional N if supplied gives the number of backward steps."
   (setq buffer-read-only nil)
   (apply 'delete-region (ess-watch-block-limits-at-point))
   (ess-watch-install-.ess_watch_expressions)
-  (ess-watch-refresh-buffer-visibly)
+  (ess-watch-refresh-buffer-visibly (current-buffer))
   )

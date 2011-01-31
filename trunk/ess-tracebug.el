@@ -83,6 +83,7 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
   (let ((map (make-sparse-keymap)))
     (define-prefix-command 'map)
     (define-key map "`" 'ess-show-R-traceback)
+    (define-key map "w" 'ess-watch)
     (define-key map "i" 'ess-dbg-goto-input-point)
     (define-key map "I" 'ess-dbg-insert-in-input-ring)
     (define-key map "d" 'ess-dbg-goto-debug-point)
@@ -979,37 +980,46 @@ Kill the *ess.dbg.[R_name]* buffer."
 
 (defun inferior-ess-dbg-output-filter (proc string)
   "Standard output filter for the inferior ESS process
-when `ess-debug' is active. Runs
-`inferior-ess-output-filter', checks for activation
-expressions (defined in `ess-dbg-regexp-action) and if in
-debugging state puts the output in *ess.dbg* buffer"
+when `ess-debug' is active. Call `inferior-ess-output-filter'.
+
+Ceck for activation expressions (defined in
+`ess-dbg-regexp-action), when found puts iESS in the debugging state.
+If in debugging state, mirrors the output into *ess.dbg* buffer."
   (let* ((is-iess (equal major-mode 'inferior-ess-mode))
-        (pbuff (process-buffer proc))
-        (dbuff (buffer-local-value 'ess-dbg-buffer pbuff))
-        (dactive (buffer-local-value 'ess-dbg-active-p pbuff))
-        (input-point (point-marker))
-        (match-jump (string-match ess-dbg-regexp-jump string))
-        (match-active (string-match ess-dbg-regexp-active string))
-        (match-skip (and match-active
-                         (match-string 1 string)))
-        );; current-buffer is still the user input buffer here
+         (pbuff (process-buffer proc))
+         (dbuff (buffer-local-value 'ess-dbg-buffer pbuff))
+         (wbuff (get-buffer ess-watch-buffer))
+         (dactive (buffer-local-value 'ess-dbg-active-p pbuff))
+         (input-point (point-marker))
+         (match-jump (string-match ess-dbg-regexp-jump string))
+         (match-active (string-match ess-dbg-regexp-active string))
+         (match-skip (and match-active
+                          (match-string 1 string)))
+         ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
+         ;;FIXME: use ess facilities and variables to operate on prompt here??
+         (has-end-prompt (string-match "> +\\'" string))
+         ) ; current-buffer is still the user's input buffer here
     (when match-jump
+      (when (and wbuff has-end-prompt) ;; refresh only if there is the end prompt, otherwise some output ends in watch and mess results
+        (ess-watch-refresh-buffer-visibly wbuff) ;if watch window exists refresh and show
+        )
       (with-current-buffer dbuff              ;; insert string in *ess.dbg* buffer
         (let ((inhibit-read-only t))
           (goto-char (point-max))
           (insert (concat "|-" string "-|"))
           ))
       (if is-iess
-          (save-selected-window
+          (save-selected-window  ;; do not pop to the debugging line if in iESS
             (ess-dbg-goto-last-ref-and-mark dbuff t))
         (ess-dbg-goto-last-ref-and-mark dbuff)
         ))
-    (when match-skip
+    (when match-skip ;; fixme: in recover mode the  skip is not required
       (process-send-string proc  "n \n")  ;; skips first requiest
       )
     (when (and dactive
                (not (or match-jump match-active))
-               (string-match "^> " string) ;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
+               has-end-prompt
+               ;; (string-match "^> " string) ;check for main  prompt!!
                )
       ;; (with-current-buffer dbuff
       ;;   (let ((inhibit-read-only t))
@@ -1020,6 +1030,9 @@ debugging state puts the output in *ess.dbg* buffer"
       (with-current-buffer pbuff
         (setq ess-dbg-active-p nil))
       (message "|<-- exited debug -->|")
+      (when wbuff
+        (ess-watch-refresh-buffer-visibly wbuff)) ;if watch window exists refresh and show
+      (sleep-for 0.05) ;; mess otherwise fixme: why?
       )
     (when (and (not dactive)
                (or match-jump match-active))
