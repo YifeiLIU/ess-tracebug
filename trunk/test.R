@@ -3,9 +3,7 @@ lm_test <-
               model = TRUE, x = FALSE, y = FALSE, qr = TRUE, singular.ok = TRUE,
               contrasts = NULL, offset, ...)
 {
-    ##:ess-bp-start::browser:##
-    browser()##:ess-bp-end:##
-    ret.x <- x
+    ret.x <- x,
     ret.y <- y
     cl <- match.call()
     mf <- match.call(expand.dots = FALSE)
