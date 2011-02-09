@@ -91,6 +91,8 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
     (define-key map "d" 'ess-dbg-flag-for-debuging)
     (define-key map "u" 'ess-dbg-unflag-for-debugging)
     (define-key map "b" 'ess-bp-set)
+    (define-key map "B" 'ess-bp-set-conditional)
+    (define-key map "l" 'ess-bp-set-logger)
     (define-key map "t" 'ess-bp-toggle-state)
     (define-key map "k" 'ess-bp-kill)
     (define-key map "K" 'ess-bp-kill-all)
@@ -276,7 +278,11 @@ if and only if ARG is positive.  All the error-parsing commands
 of the Compilation major mode are available in iESS
 buffers. Particularly the keys \\[next-error] and
 \\[previous-error] could be used to navigate to next/previous
-errors.  See `compilation-mode'."
+errors.  See `compilation-mode'.
+
+You should use this command only to activate/deactivate the
+traceback functionality separately. Otherwise use
+`ess-tracebug'."
   (interactive "P")
   (when arg
     (setq arg (prefix-numeric-value arg)))
@@ -812,20 +818,27 @@ The input-event-horn is a virtual object which consists of two
 rings `ess-dbg-forward-ring' and `ess-dbg-backward-ring' which
 are joint at their tops. " ;; todo: link to the homepage with a pic
   (interactive)
-  (let* ((input-point (ring-ref ess-dbg-forward-ring 0))
-        (ev last-command-event)
+  (let* ((ev last-command-event)
         (com-char  (event-basic-type ev))
-        (ring-el 0))
-    (ring-insert ess-dbg-backward-ring (point-marker))
-    (switch-to-buffer (marker-buffer input-point))
-    (goto-char (marker-position input-point))
+        (ring-el 0)
+        input-point)
+    (if (memq 'shift (event-modifiers ev))
+        (setq input-point (ring-ref ess-dbg-backward-ring 0))
+      (ring-insert ess-dbg-backward-ring (point-marker)) ;; insert in backward ring ;;todo: check if the marker to this (close by?) position is already in the ring
+      (setq input-point (ring-ref ess-dbg-forward-ring 0))
+      )
+    (when (marker-buffer input-point) ;; todo: give a message here if buff is not found
+      (switch-to-buffer (marker-buffer input-point))
+      (when (marker-position input-point)
+        (goto-char (marker-position input-point))
+        ))
     (while  (eq (event-basic-type (setq ev (read-event))) com-char)
       (if (memq 'shift (event-modifiers ev))
           (setq ring-el (1- ring-el))
         (setq ring-el (1+ ring-el))
         )
       (if (< ring-el 0)
-          (setq input-point (ring-ref ess-dbg-backward-ring ring-el))  ;; get it from backward-ring
+          (setq input-point (ring-ref ess-dbg-backward-ring (- ring-el)))  ;; get it from backward-ring
         (setq input-point (ring-ref ess-dbg-forward-ring ring-el)) ;; get it from forward-ring
         )
       (when (marker-buffer input-point)
@@ -893,7 +906,7 @@ ESS and iESS modes by binding `ess-tracebug-map' to
 `ess-tracebug-command-prefix' in `ess-mode-map' and `inferior-ess-mode-map' respectively.
 
 Note: you should use this command if you wish to have only
-debug functionality enabled.
+debug functionality enabled, otherwise use `ess-tracebug'
 "
   (interactive)
   (ess-force-buffer-current "Process to activate/deactivate the debuger: ")
@@ -954,8 +967,9 @@ debug functionality enabled.
     (define-key inferior-ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
     ;; Un/Debug at point functionality
     (ess-dbg-inject-un/debug-commands)  ;;fixme:bug?: executes in curent proc buffer + messes with .help.ESS function
-    (sleep-for 0.3) ;; kludge need to allow for the initialization of R.
-    ;; Watch (inject here) ::todo
+    (sleep-for 0.1) ;; kludge need to allow for the initialization of R.
+    (ess-watch-inject-commands) ;;fixme:bug:  why is this executed in *R* buffer?
+    (sleep-for 0.2)
     )
   )
 
@@ -1015,7 +1029,6 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          (match-skip (and match-active
                           (match-string 1 string)))
          ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
-         ;;FIXME: use ess facilities and variables to operate on prompt here??
          (has-end-prompt (string-match "> +\\'" string))
          ) ; current-buffer is still the user's input buffer here
     (when match-jump
@@ -1040,7 +1053,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
                has-end-prompt
                ;; (string-match "^> " string) ;check for main  prompt!!
                )
-      ;; (with-current-buffer dbuff
+      ;; (with-current-buffer dbuff ;; uncomment to see the value of STRING just before  debugger exists
       ;;   (let ((inhibit-read-only t))
       ;;     (goto-char (point-max))
       ;;     (insert (concat " ---\n " string "\n ---"))
@@ -1050,8 +1063,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         (setq ess-dbg-active-p nil))
       (message "|<-- exited debug -->|")
       (when wbuff
-        (ess-watch-refresh-buffer-visibly wbuff)) ;if watch window exists refresh and show
-      (sleep-for 0.05) ;; mess otherwise fixme: why?
+        (ess-watch-refresh-buffer-visibly wbuff .05 t)) ;has-end-prompt is t so don't wait for prompt here (might be printing something )
       )
     (when (and (not dactive)
                (or match-jump match-active))
@@ -1370,24 +1382,39 @@ Equivalent to 'n' at the R prompt."
 ;;;_ + BREAKPOINTS
 
 (defface ess-bp-fringe-inactive-face
-  '((((background light)) (:foreground "DimGray"))
-    (((background dark))  (:foreground "LightGray"))
+  '((((class color)
+      (background light)) (:foreground "DimGray"))
+    (((class color)
+      (background dark))  (:foreground "LightGray"))
     )
-  "Face used to highlight inactive breakpoints in the fringe."
+  "Face used to highlight inactive breakpoints."
+  :group 'ess-debug)
+
+(defface ess-bp-fringe-logger-face
+  '((((class color)
+      (background light)) (:foreground "tomato4"))
+    (((class color)
+      (background dark))  (:foreground "tomato1"))
+    )
+  "Face used to highlight loggers."
   :group 'ess-debug)
 
 (defface ess-bp-fringe-browser-face
-  '((((background light)) (:foreground "medium blue"))
-    (((background dark))  (:foreground "deep sky blue"))
+  '((((class color)
+      (background light)) (:foreground "medium blue"))
+    (((class color)
+      (background dark))  (:foreground "deep sky blue"))
     )
-  "Face used to highlight 'browser' breakpoints in the fringe."
+  "Face used to highlight 'browser' breakpoints."
   :group 'ess-debug)
 
 (defface ess-bp-fringe-recover-face
-  '((((background light)) (:foreground "dark magenta"))
-    (((background dark))  (:foreground "magenta"))
+  '((((class color)
+      (background light)) (:foreground "dark magenta"))
+    (((class color)
+      (background dark))  (:foreground "magenta"))
     )
-  "Face used to highlight 'recover' breakpoints in the fringe."
+  "Face used to highlight 'recover' breakpoints fringe."
   :group 'ess-debug)
 
 
@@ -1410,7 +1437,7 @@ Equivalent to 'n' at the R prompt."
         )
       "List of lists of breakpoint types.
 Each sublist  has five elements:
-1- symbol giving the type of bp.
+1- symbol giving the name of specification
 2- R expression to be inserted
 3- string to be displayed instead of the expression
 4- fringe bitmap to use
@@ -1422,17 +1449,49 @@ Each sublist  has five elements:
       )
 
 (defcustom ess-bp-inactive-spec
-      '( nil     "##"    filled-square  ess-bp-fringe-inactive-face)
-      "List for inactive breakpoint specifications.
-List format is identical that of `ess-bp-type-spec-alist'.
-TODO: nil??."
+      '(inactive     "##"    filled-square  ess-bp-fringe-inactive-face)
+      "List giving the inactive breakpoint specifications.
+List format is identical to that of the elements of
+`ess-bp-type-spec-alist' except that the second element giving
+the R expression is meaningless here." ;;fixme: second element is missing make it nil for consistency with all other specs
       :group 'ess-debug)
 
+(defcustom ess-bp-conditional-spec
+  '(conditional     "browser(expr={%s})"  "CB[ %s ]>\n"  question-mark  ess-bp-fringe-browser-face)
+  "List giving the conditional breakpoint specifications.
+List format is identical to that of the elements of
+`ess-bp-type-spec-alist'.  User is asked for the conditional
+expression to be replaced instead of %s in the second and third
+elements of the specifications."
+  :group 'ess-debug)
 
-(defun ess-bp-create (&optional type)
+(defcustom ess-bp-logger-spec
+  '(logger     ".ess_log_eval('%s')"  "L[ \"%s\" ]>\n"  hollow-square  ess-bp-fringe-logger-face)
+    "List giving the loggers specifications.
+List format is identical to that of `ess-bp-type-spec-alist'."
+  :group 'ess-debug)
+
+
+(defun ess-bp-create (type &optional condition)
   "Set breakpoint for the current line.
  Returns the begging position of the hidden text."
-  (let* ((bp-specs (or (assoc type ess-bp-type-spec-alist)
+  (let* ((spec-alist (cond
+                      ((eq type 'conditional)
+                       (let ((tl (copy-seq  ess-bp-conditional-spec)))
+                         (when (eq (length condition) 0)
+                           (setq condition "TRUE"))
+                         (setcar (cdr tl) (format (cadr tl) condition))
+                         (setcar (cddr tl) (format (caddr tl) condition))
+                         (list tl)))
+                      ((eq type 'logger)
+                       (let ((tl (copy-seq ess-bp-logger-spec)))
+                         (when (eq (length condition) 0)
+                           (setq condition "watchLog"))
+                         (setcar (cdr tl) (format (cadr tl) condition))
+                         (setcar (cddr tl) (format (caddr tl) condition))
+                         (list tl)))
+                      (t ess-bp-type-spec-alist)))
+         (bp-specs (or (assoc type spec-alist)
                        (error "Undefined breakpoint type %s" type)))
          (init-pos (point-marker))
          (fringe-bitmap (nth 3 bp-specs))
@@ -1469,8 +1528,7 @@ TODO: nil??."
     (indent-for-tab-command)
     (goto-char (1- init-pos))  ;; sort of save-excursion
     insertion-pos
-    )
-  )
+    ))
 
 (defun ess-bp-get-bp-position-nearby ()
   "Return the cons (beg . end) of breakpoint limit points
@@ -1502,10 +1560,7 @@ Use `ess-bp-previous-position' in programs."
             (cons pos-start (next-single-property-change pos-start 'ess-bp nil (window-end)))
           )
           ;(message "No breakpoints in the visible area"))
-        )
-      )
-    )
-  )
+        ))))
 
 
 (defun ess-bp-previous-position ()
@@ -1516,8 +1571,50 @@ to the current position, nil if not found. "
                      (previous-single-property-change (point) 'ess-bp ))))
     (if pos-end
         (cons (previous-single-property-change pos-end 'ess-bp) pos-end)
+      )))
+
+(defun ess-bp-set ()
+  (interactive)
+  (let* ((pos (ess-bp-get-bp-position-nearby))
+         (same-line (if pos
+                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
+         (types ess-bp-type-spec-alist)
+         (ev last-command-event)
+         (com-char  (event-basic-type ev))
+         bp-type
+         )
+    (when same-line
+      ;; set bp-type to next type in types
+      (setq bp-type (get-text-property (car pos) 'bp-type))
+      (setq types (cdr (member (assq bp-type types) types))) ; nil if bp-type is last in the list
+      (if (null types) (setq types ess-bp-type-spec-alist))
+      (ess-bp-kill)
+      (indent-for-tab-command)
       )
-    )
+    (setq bp-type (pop types))
+    (ess-bp-create (car bp-type))
+    (while  (eq (setq ev (read-event)) com-char)
+      (if (null types) (setq types ess-bp-type-spec-alist))
+      (setq bp-type (pop types))
+      (ess-bp-kill)
+      (ess-bp-create (car bp-type))
+      (indent-for-tab-command)
+      )
+    (push ev unread-command-events)
+    ))
+
+
+(defun ess-bp-set-conditional (condition)
+  (interactive "sCondition : ")
+  (print condition)
+  (ess-bp-create 'conditional condition)
+  (indent-for-tab-command)
+  )
+
+(defun ess-bp-set-logger (name)
+  (interactive "sLogger name : ")
+  (ess-bp-create 'logger name)
+  (indent-for-tab-command)
   )
 
 (defun ess-bp-kill ()
@@ -1597,35 +1694,6 @@ to the current position, nil if not found. "
     )
   )
 
-(defun ess-bp-set ()
-  (interactive)
-  (let* ((pos (ess-bp-get-bp-position-nearby))
-         (same-line (if pos
-                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
-         (types ess-bp-type-spec-alist)
-         bp-type
-         (ev last-command-event)
-         (com-char  (event-basic-type ev))
-         )
-    (when same-line
-      (setq bp-type (get-text-property (car pos) 'bp-type))  ;; the meaning of bp-type changes latter (confounding slightly)
-      (setq types (cdr (member (assq bp-type types) types))) ; nil if bp-type is last in the list
-      (if (null types) (setq types ess-bp-type-spec-alist))
-      (ess-bp-kill)
-      (indent-for-tab-command)
-      )
-    (setq bp-type (pop types))
-    (ess-bp-create (car bp-type))
-    (while  (eq (setq ev (read-event)) com-char)
-      (if (null types) (setq types ess-bp-type-spec-alist))
-      (setq bp-type (pop types))
-      (ess-bp-kill)
-      (ess-bp-create (car bp-type))
-      (indent-for-tab-command)
-      )
-    (push ev unread-command-events)
-    )
-  )
 
 
 (defun ess-bp-next nil
@@ -1663,36 +1731,52 @@ to the current position, nil if not found. "
 
 ;;;_ + WATCH
 
-(defvar ess-watch-inject-command
-  "
-assign(\".ess_watch_eval\", function(){
-    if(!exists(\".ess_watch_expressions\")){
-        assign(\".ess_watch_expressions\", list(), envir = .GlobalEnv)
+(defun ess-watch-inject-commands ()
+  (ess-command "
+assign('.ess_watch_eval', function(){
+    if(!exists('.ess_watch_expressions')){
+        assign('.ess_watch_expressions', list(), envir = .GlobalEnv)
     }
     if(length(.ess_watch_expressions) == 0L){
-        cat(\"\n# Watch list is empty!\n
-# a/i     append/insert new expression
-# k       kill
-# e       edit the expression
-# r       rename
-# n/p     navigate
-# u/U     move the expression up/down
-# q       kill the buffer
-\")
+        cat('\n# Watch list is empty!\n
+                                        # a/i     append/insert new expression
+                                        # k       kill
+                                        # e       edit the expression
+                                        # r       rename
+                                        # n/p     navigate
+                                        # u/U     move the expression up/down
+                                        # q       kill the buffer
+            ')
     }else{
         .parent_frame <- parent.frame()
         .essWEnames <- allNames(.ess_watch_expressions)
         len0p <- !nzchar(.essWEnames)
         .essWEnames[len0p] <- seq_along(len0p)[len0p]
         for(i in seq_along(.ess_watch_expressions)){
-            cat(\"\n@---- \", .essWEnames[[i]], \" \", rep.int(\"-\", max(0, 35 - nchar(.essWEnames[[i]]))), \"->\n\", sep = \"\")
-            cat( paste(\"@--->\", deparse(.ess_watch_expressions[[i]][[1L]])), \" \n\", sep = \"\")
+            cat('\n@---- ', .essWEnames[[i]], ' ', rep.int('-', max(0, 35 - nchar(.essWEnames[[i]]))), '->\n', sep = '')
+            cat( paste('@--->', deparse(.ess_watch_expressions[[i]][[1L]])), ' \n', sep = '')
             tryCatch(print(eval(.ess_watch_expressions[[i]], envir = .parent_frame)),
-                     error = function(e) cat(\"Error:\", e$message, \"\n\" ),
-                     warning = function(w) cat(\"warning: \", w$message, \"\n\"))
+                     error = function(e) cat('Error:', e$message, '\n' ),
+                     warning = function(w) cat('warning: ', w$message, '\n' ))
         }}
-}, envir = .GlobalEnv); environment(.ess_watch_eval)<-.GlobalEnv
-")
+}, envir = .BaseNamespaceEnv); environment(.ess_watch_eval)<-.GlobalEnv
+assign('.ess_log_eval',  function(log_name){
+    if(!exists(log_name, envir = .GlobalEnv, inherits = FALSE))
+        assign(log_name, list(), envir = .GlobalEnv)
+    log <- get(log_name, envir = .GlobalEnv, inherits = FALSE)
+    .essWEnames <- allNames(.ess_watch_expressions)
+    cur_log <- list()
+    .parent_frame <- parent.frame()
+    for(i in seq_along(.ess_watch_expressions))
+        cur_log[[i]] <-
+            tryCatch(eval(.ess_watch_expressions[[i]]), envir = .parent_frame,
+                     error = function(e) paste('Error:', e$message, '\n'),
+                     warning = function(w) paste('warning: ', w$message, '\n'))
+    names(cur_log) <- .essWEnames
+    assign(log_name, c(log, list(cur_log)), envir = .GlobalEnv)
+    invisible(NULL)
+}, envir = .BaseNamespaceEnv); environment(.ess_log_eval) <- .GlobalEnv
+"))
 
 (defvar ess-watch-command
   ;; assumes that every expression is a structure of length 1 as returned by parse.
@@ -1740,7 +1824,6 @@ for more information."
   (let ((wbuf (get-buffer-create ess-watch-buffer)))
     (set-buffer wbuf)
     (ess-watch-mode)
-    (ess-command ess-watch-inject-command) ;;fixme:bug:  why is this executed in *R* buffer?
     (ess-watch-refresh-buffer-visibly wbuf) ;; evals the ess-command and displays the buffer if not visible
     (pop-to-buffer wbuf)
     )
@@ -1916,7 +1999,7 @@ Arguments IGNORE and NOCONFIRM currently not used."
   (ess-watch)
   (message "Watch reverted"))
 
-(defun ess-watch-refresh-buffer-visibly (wbuf)
+(defun ess-watch-refresh-buffer-visibly (wbuf &optional sleep no-prompt-check)
   "Eval `ess-watch-command' and direct the output into the WBUF.
 Call `ess-watch-buffer-show' to make the buffer visible, without
 selecting it.  This function is primarily intended for refreshing
@@ -1928,7 +2011,7 @@ the watch window during the debugging."
   (with-current-buffer wbuf
     (let ((curr-block (max 1 (ess-watch-block-at-point)))) ;;can be 0 if
       (setq buffer-read-only nil)
-      (ess-command  ess-watch-command wbuf)
+      (ess-command  ess-watch-command wbuf sleep no-prompt-check)
       ;; delete the ++++++> line
       (goto-char (point-min))
       (delete-region (point-at-bol) (+ 1 (point-at-eol)))
@@ -2135,6 +2218,8 @@ Optional N if supplied gives the number of backward steps."
   (ess-command "
 local({
     .ess_dbg_getTracedAndDebugged <- function(){
+        tr_state <- tracingState(FALSE)
+        on.exit(tracingState(tr_state))
         generics <- methods::getGenerics()
         out <- c()
         for(i in seq_along(generics)){
@@ -2151,6 +2236,8 @@ local({
         c(debugged, out)
     }
     .ess_dbg_UntraceOrUndebug <- function(name){
+        tr_state <- tracingState(FALSE)
+        on.exit(tracingState(tr_state))
         ## name is a name of a function to be undebugged or has a form name:Class1#Class2#Class3 for traced methods
         name <- strsplit(name, ':', fixed = TRUE)[[1]]
         if(length(name)>1){
@@ -2167,7 +2254,9 @@ local({
         }
     }
     .ess_dbg_UndebugALL <- function(funcs){
-        lapply(funcs, .ess_dbg_UntraceOrUndebug)
+        tr_state <- tracingState(FALSE)
+        on.exit(tracingState(tr_state))
+        invisible(lapply(funcs, .ess_dbg_UntraceOrUndebug))
     }
     environment(.ess_dbg_UndebugALL) <-
         environment(.ess_dbg_UntraceOrUndebug) <-
