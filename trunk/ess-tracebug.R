@@ -98,14 +98,13 @@ assign('.ess_watch_eval', function(){
     }
     if(length(.ess_watch_expressions) == 0L){
         cat('\n# Watch list is empty!\n
-                                        # a/i     append/insert new expression
-                                        # k       kill
-                                        # e       edit the expression
-                                        # r       rename
-                                        # n/p     navigate
-                                        # u/U     move the expression up/down
-                                        # q       kill the buffer
-            ')
+# a/i     append/insert new expression
+# k       kill
+# e       edit the expression
+# r       rename
+# n/p     navigate
+# u/U     move the expression up/down
+# q       kill the buffer')
     }else{
         .parent_frame <- parent.frame()
         .essWEnames <- allNames(.ess_watch_expressions)
