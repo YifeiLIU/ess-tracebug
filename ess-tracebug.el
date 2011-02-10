@@ -1033,7 +1033,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          ) ; current-buffer is still the user's input buffer here
     (when match-jump
       (when (and wbuff has-end-prompt) ;; refresh only if there is the end prompt, otherwise some output ends in watch and mess results
-        (ess-watch-refresh-buffer-visibly wbuff) ;if watch window exists refresh and show
+        (ess-watch-refresh-buffer-visibly wbuff nil nil) ;if watch window exists refresh and show
         )
       (with-current-buffer dbuff              ;; insert string in *ess.dbg* buffer
         (let ((inhibit-read-only t))
@@ -1063,7 +1063,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         (setq ess-dbg-active-p nil))
       (message "|<-- exited debug -->|")
       (when wbuff
-        (ess-watch-refresh-buffer-visibly wbuff .05 t)) ;has-end-prompt is t so don't wait for prompt here (might be printing something )
+        (ess-watch-refresh-buffer-visibly wbuff 2 t)) ;has-end-prompt is t so don't wait for prompt here (might be printing something )
       )
     (when (and (not dactive)
                (or match-jump match-active))
@@ -1739,14 +1739,14 @@ assign('.ess_watch_eval', function(){
     }
     if(length(.ess_watch_expressions) == 0L){
         cat('\n# Watch list is empty!\n
-                                        # a/i     append/insert new expression
-                                        # k       kill
-                                        # e       edit the expression
-                                        # r       rename
-                                        # n/p     navigate
-                                        # u/U     move the expression up/down
-                                        # q       kill the buffer
-            ')
+# a/i     append/insert new expression
+# k       kill
+# e       edit the expression
+# r       rename
+# n/p     navigate
+# u/U     move the expression up/down
+# q       kill the buffer
+')
     }else{
         .parent_frame <- parent.frame()
         .essWEnames <- allNames(.ess_watch_expressions)
@@ -1780,7 +1780,8 @@ assign('.ess_log_eval',  function(log_name){
 
 (defvar ess-watch-command
   ;; assumes that every expression is a structure of length 1 as returned by parse.
-  ".ess_watch_eval()\n")
+  "
+.ess_watch_eval()\n")
 
 (define-fringe-bitmap 'current-watch-bar
   [#b00001100] nil nil '(top t))
