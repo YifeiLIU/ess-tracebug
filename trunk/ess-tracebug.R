@@ -69,15 +69,6 @@ local({
     assign('.ess_dbg_UndebugALL', .ess_dbg_UndebugALL, envir= .BaseNamespaceEnv)
 })
 
-
-
-
-
-
-
-
-
-
 setGeneric("blabla", function(a=34,b=343) standardGeneric("blabla"))
 
 methods:::.showMethodsTable()
@@ -118,6 +109,7 @@ assign('.ess_watch_eval', function(){
                      warning = function(w) cat('warning: ', w$message, '\n' ))
         }}
 }, envir = .BaseNamespaceEnv); environment(.ess_watch_eval)<-.GlobalEnv
+
 assign('.ess_log_eval',  function(log_name){
     if(!exists(log_name, envir = .GlobalEnv, inherits = FALSE))
         assign(log_name, list(), envir = .GlobalEnv)

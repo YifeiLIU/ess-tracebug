@@ -4,14 +4,10 @@
 ;; Author: Spinu Vitalie
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
-;; Created: Oct  14 14:15:22 2010
-;; Version: 0.1a
-;; Last-Updated:
-;;           By:
-;;     Update #: 0
+;; Created: Oct 14 14:15:22 2010
+;; Version: 0.2a
 ;; URL:
 ;; Keywords: debug, traceback, ESS, R
-;; Compatibility:
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -51,7 +47,7 @@
 ;;
 ;;; Code:
 
-(require 'face-remap nil t) ;; needed to scale the text in watch buffer
+(require 'face-remap nil t) ;; needed for scaling of the text in watch buffer
 
 (defgroup ess-tracebug nil
   "Error navigation and debug facilities for ESS."
@@ -333,7 +329,7 @@ You can bound 'no-select' versions of this commands  for convenience:
     (setq next-error-last-buffer trbuf) ;; need to avoid
     (set-buffer trbuf)
     (toggle-read-only -1)
-    (ess-command  "try(traceback(), silent=TRUE);cat(\n\"---------------------------------- \n\", geterrmessage(), fill=TRUE)\n" trbuf)
+    (ess-command2  "try(traceback(), silent=TRUE);cat(\n\"---------------------------------- \n\", geterrmessage(), fill=TRUE)\n" trbuf)
     (if (string= "No traceback available" (buffer-substring 1 23))
         (message "No traceback available")
       (ess-dirs)
@@ -1015,7 +1011,7 @@ Kill the *ess.dbg.[R_name]* buffer."
   "Standard output filter for the inferior ESS process
 when `ess-debug' is active. Call `inferior-ess-output-filter'.
 
-Ceck for activation expressions (defined in
+Check for activation expressions (defined in
 `ess-dbg-regexp-action), when found puts iESS in the debugging state.
 If in debugging state, mirrors the output into *ess.dbg* buffer."
   (let* ((is-iess (equal major-mode 'inferior-ess-mode))
@@ -1031,10 +1027,11 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
          (has-end-prompt (string-match "> +\\'" string))
          ) ; current-buffer is still the user's input buffer here
+
+    (process-put proc 'ready has-end-prompt)
+
+    ;; JUMP to line during the debugger
     (when match-jump
-      (when (and wbuff has-end-prompt) ;; refresh only if there is the end prompt, otherwise some output ends in watch and mess results
-        (ess-watch-refresh-buffer-visibly wbuff nil nil) ;if watch window exists refresh and show
-        )
       (with-current-buffer dbuff              ;; insert string in *ess.dbg* buffer
         (let ((inhibit-read-only t))
           (goto-char (point-max))
@@ -1044,15 +1041,19 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
           (save-selected-window  ;; do not pop to the debugging line if in iESS
             (ess-dbg-goto-last-ref-and-mark dbuff t))
         (ess-dbg-goto-last-ref-and-mark dbuff)
-        ))
+        )
+      (when (and wbuff has-end-prompt) ;; refresh only if the process is ready
+        (ess-watch-refresh-buffer-visibly wbuff) ;if watch window exists refresh and show
+        )
+      )
+    ;; SKIP one line
     (when match-skip ;; fixme: in recover mode the  skip is not required
       (process-send-string proc  "n \n")  ;; skips first requiest
       )
+    ;; EXIT the debuger
     (when (and dactive
                (not (or match-jump match-active))
-               has-end-prompt
-               ;; (string-match "^> " string) ;check for main  prompt!!
-               )
+               has-end-prompt)
       ;; (with-current-buffer dbuff ;; uncomment to see the value of STRING just before  debugger exists
       ;;   (let ((inhibit-read-only t))
       ;;     (goto-char (point-max))
@@ -1063,21 +1064,20 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         (setq ess-dbg-active-p nil))
       (message "|<-- exited debug -->|")
       (when wbuff
-        (ess-watch-refresh-buffer-visibly wbuff 2 t)) ;has-end-prompt is t so don't wait for prompt here (might be printing something )
+        (ess-watch-refresh-buffer-visibly wbuff ))
       )
+    ;; ACTIVATE the debugger if entered for the first time
     (when (and (not dactive)
                (or match-jump match-active))
       (unless is-iess
              (ring-insert ess-dbg-forward-ring input-point))
       (with-current-buffer pbuff
-        (setq ess-dbg-active-p t)
-        )
-      (setq dactive t)
+        (setq ess-dbg-active-p t))
       )
-    (inferior-ess-output-filter proc string)
-    (when (and match-skip
-                ; (not is-iess))  ; uncomment not to enter easy key mode in iESS
-               )
+
+    (comint-output-filter proc string)
+    ;; EASY COMMANDS
+    (when match-skip
       (ess-dbg-easy-command t))
     )
   )
@@ -1606,7 +1606,6 @@ to the current position, nil if not found. "
 
 (defun ess-bp-set-conditional (condition)
   (interactive "sCondition : ")
-  (print condition)
   (ess-bp-create 'conditional condition)
   (indent-for-tab-command)
   )
@@ -1732,7 +1731,7 @@ to the current position, nil if not found. "
 ;;;_ + WATCH
 
 (defun ess-watch-inject-commands ()
-  (ess-command "
+  (ess-command2 "
 assign('.ess_watch_eval', function(){
     if(!exists('.ess_watch_expressions')){
         assign('.ess_watch_expressions', list(), envir = .GlobalEnv)
@@ -1759,8 +1758,10 @@ assign('.ess_watch_eval', function(){
                      error = function(e) cat('Error:', e$message, '\n' ),
                      warning = function(w) cat('warning: ', w$message, '\n' ))
         }}
-}, envir = .BaseNamespaceEnv); environment(.ess_watch_eval)<-.GlobalEnv
+}, envir = .BaseNamespaceEnv); environment(.ess_watch_eval)<-.GlobalEnv;
 assign('.ess_log_eval',  function(log_name){
+    if(exists('.ess_watch_expressions', envir= .GlobalEnv, inherits=F) &&
+        length(.ess_watch_expressions)>0L){
     if(!exists(log_name, envir = .GlobalEnv, inherits = FALSE))
         assign(log_name, list(), envir = .GlobalEnv)
     log <- get(log_name, envir = .GlobalEnv, inherits = FALSE)
@@ -1775,13 +1776,15 @@ assign('.ess_log_eval',  function(log_name){
     names(cur_log) <- .essWEnames
     assign(log_name, c(log, list(cur_log)), envir = .GlobalEnv)
     invisible(NULL)
-}, envir = .BaseNamespaceEnv); environment(.ess_log_eval) <- .GlobalEnv
+}}, envir = .BaseNamespaceEnv)
+environment(.ess_log_eval) <- .GlobalEnv
+str(iris)
 "))
+
 
 (defvar ess-watch-command
   ;; assumes that every expression is a structure of length 1 as returned by parse.
-  "
-.ess_watch_eval()\n")
+  ".ess_watch_eval()\n")
 
 (define-fringe-bitmap 'current-watch-bar
   [#b00001100] nil nil '(top t))
@@ -2012,8 +2015,8 @@ the watch window during the debugging."
   (with-current-buffer wbuf
     (let ((curr-block (max 1 (ess-watch-block-at-point)))) ;;can be 0 if
       (setq buffer-read-only nil)
-      (ess-command  ess-watch-command wbuf sleep no-prompt-check)
-      ;; delete the ++++++> line
+      (ess-command2  ess-watch-command wbuf sleep no-prompt-check)
+      ;; delete the ++++++> line  ;; not very reliable but works fine so far.
       (goto-char (point-min))
       (delete-region (point-at-bol) (+ 1 (point-at-eol)))
       (ess-watch-set-current curr-block)
@@ -2216,7 +2219,7 @@ Optional N if supplied gives the number of backward steps."
 ;;;_ + Un/Debug at point
 
 (defun ess-dbg-inject-un/debug-commands () ;; fixme: bug: if no starting new-line,ess-command hangs
-  (ess-command "
+  (ess-command2 "
 local({
     .ess_dbg_getTracedAndDebugged <- function(){
         tr_state <- tracingState(FALSE)
@@ -2278,7 +2281,7 @@ local({
       (set-buffer tbuffer)
       (erase-buffer)
       (ess-if-verbose-write (format "ess-get-signatures*(%s).. " method))
-      (ess-command (concat "showMethods(\"" method "\")\n") tbuffer)
+      (ess-command2 (concat "showMethods(\"" method "\")\n") tbuffer)
       (ess-if-verbose-write " [ok] ..\n")
       (goto-char (point-min))
       (if (not (re-search-forward "Function:" nil t))
@@ -2323,8 +2326,8 @@ for signature and trace it with browser tracer."
                                             nil t nil nil "*default*")
                 )
           (if (equal signature "*default*")
-              (ess-command (concat "trace(\"" function "\", tracer = browser)\n") tbuffer) ;debug the default function
-            (ess-command (concat "trace(\"" function "\", tracer = browser, signature = c(" signature "))\n") tbuffer)
+              (ess-command2 (concat "trace(\"" function "\", tracer = browser)\n") tbuffer) ;debug the default function
+            (ess-command2 (concat "trace(\"" function "\", tracer = browser, signature = c(" signature "))\n") tbuffer)
             )
           (set-buffer tbuffer)
           (goto-char (point-min))
@@ -2332,7 +2335,7 @@ for signature and trace it with browser tracer."
           )
       ;; not generic
       (save-excursion
-        (ess-command (concat "debug(\"" function "\")\n") tbuffer)
+        (ess-command2 (concat "debug(\"" function "\")\n") tbuffer)
         (set-buffer tbuffer)
         (if (= (point-max) 1)
             (message "Flagged function '%s' for debugging" function)
@@ -2351,8 +2354,8 @@ for signature and trace it with browser tracer."
         (message "No debugged or traced functions/methods found")
       (setq fun (completing-read "Un-debug: " debugged nil t nil nil "*ALL*"))
       (if (equal fun "*ALL*" )
-          (ess-command (concat ".ess_dbg_UndebugALL(c(\"" (mapconcat '(lambda (x) x) debugged "\", \"") "\"))\n") tbuffer)
-        (ess-command (concat ".ess_dbg_UntraceOrUndebug(\"" fun "\")\n") tbuffer)
+          (ess-command2 (concat ".ess_dbg_UndebugALL(c(\"" (mapconcat '(lambda (x) x) debugged "\", \"") "\"))\n") tbuffer)
+        (ess-command2 (concat ".ess_dbg_UntraceOrUndebug(\"" fun "\")\n") tbuffer)
         )
       (with-current-buffer  tbuffer
         (if (= (point-max) 1)
@@ -2362,6 +2365,97 @@ for signature and trace it with browser tracer."
       )
     )
   )
+
+;;;_ * ESS inf redefined
+
+(defun ess-wait-for-process (proc &optional sleep force-redisplay)
+  "Wait for the ready property of the process to become non-nil."
+  (if sleep (sleep-for sleep)); we sleep here, *and* wait below
+  (accept-process-output proc .5)
+  (while (not (process-get proc 'ready))
+    ;; (message (format "wait:%s" (process-get proc 'ready)))
+    (accept-process-output proc .5)
+    (if force-redisplay (redisplay t))
+    ))
+
+
+(defun ordinary-insertion-filter2 (proc string)
+  "improved version of ess filter"
+  (with-current-buffer (process-buffer proc)
+    (let (moving)
+      (process-put proc 'ready (string-match "> +\\'" string))
+          ;; (with-current-buffer tbuf
+          ;;   (insert (concat "************************************\n" string))
+          ;;   )
+          ;; (message (format "ord:%s" (process-get proc 'ready)))
+      (setq moving (= (point) (process-mark proc)))
+      (save-excursion
+        ;; Insert the text, moving the process-marker.
+        (goto-char (process-mark proc))
+        (insert string)
+        (set-marker (process-mark proc) (point)))
+      (if moving (goto-char (process-mark proc))))
+    ))
+
+(defun ess-command2 (com &optional buf sleep no-prompt-check)
+"Improved version of `ess-command'"
+  (let* ((sprocess (get-ess-process ess-current-process-name))
+         sbuffer
+         do-sleep end-of-output
+         oldpb oldpf oldpm
+         )
+    ;; the ddeclient-p checks needs to use the local-process-name
+    (unless buf
+      (setq buf (get-buffer-create " *ess-command-output*")))
+    (with-current-buffer buf
+      (unless ess-local-process-name
+        (setq ess-local-process-name ess-current-process-name)))
+    (if (ess-ddeclient-p)
+        (ess-command-ddeclient com buf sleep)
+      (setq sbuffer (process-buffer sprocess))
+
+      ;; else: "normal", non-DDE behavior:
+
+      (save-excursion
+        (set-buffer sbuffer)
+        (ess-if-verbose-write (format "(ess-command2 %s ..)" com))
+        (unless (or (process-get sprocess 'ready) no-prompt-check)
+          (ess-error
+           "ESS process not ready. Finish your command before trying again."))
+        (setq oldpf (process-filter sprocess))
+        (setq oldpb (process-buffer sprocess))
+        (setq oldpm (marker-position (process-mark sprocess)))
+        ;; need the buffer-local values in result buffer "buf":
+        (unwind-protect
+            (progn
+              (set-process-buffer sprocess buf)
+              (set-process-filter sprocess 'ordinary-insertion-filter2)
+              ;; Output is now going to BUF:
+              (save-excursion
+                (set-buffer buf)
+                (setq do-sleep		    ; only now when in sprocess buffer
+                      (progn
+                        (if sleep (if (numberp sleep) nil (setq sleep 1))) ; t means 1
+                        (and ess-cmd-delay sleep)))
+                (erase-buffer)
+                (set-marker (process-mark sprocess) (point-min))
+                (process-send-string sprocess com)
+                (if no-prompt-check
+                    (sleep-for 0.020); 0.1 is noticeable!
+                  ;; else: default
+                  (ess-wait-for-process sprocess
+                                        (and do-sleep (* 0.4 sleep))))
+                (message "command:%s" (process-get sprocess 'ready))
+                (delete-region (point-at-bol) (point-max))
+                )
+              (ess-if-verbose-write " .. ok{ess-command2}\n")
+              )
+          ;; Restore old values for process filter
+          (set-process-buffer sprocess oldpb)
+          (set-process-filter sprocess oldpf)
+          (set-marker (process-mark sprocess) oldpm))
+        ))
+    ))
 
 
 ;;;_ * Kludges and Fixes
