@@ -79,7 +79,6 @@ default binding `transpose-words'. In this case make sure to
 rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
   :type 'string
   :group 'ess-tracebug)
-
 (defvar ess-tracebug-map
   (let ((map (make-sparse-keymap)))
     (define-prefix-command 'map)
