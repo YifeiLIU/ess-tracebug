@@ -559,18 +559,18 @@ See `ess-dbg-error-action-alist' for more."
 )
 
 (defcustom  ess-dbg-error-action-alist
-  '(( "-". "NULL" )
-    ( "r". "utils::recover")
-    ( "t". "base::traceback"))
+  '(( "-" "NONE"       "NULL" )
+    ( "r" "RECOVER"    "utils::recover")
+    ( "t" "TRACEBACK"  "base::traceback"))
   "Alist of 'on-error' actions.
-  Each element must have the form (SYM . ACTION) where SYM is the
-  string to be displayed in the mode line when the action is in
-  place and ACTION is the string giving the actual expression to
-  be assigned to 'error' user option. See R's help ?options for
-  more details."
-  :type '(alist :key-type string :value-type string)
+  Each element must have the form (SYMB DISP ACTION) where DISP
+  is the string to be displayed in the mode line when the action
+  is in place. SYMB is the symbolic name of an action. ACTION
+  is the string giving the actual expression to be assigned to
+  'error' user option. See R's help ?options for more details."
+  :type '(alist :key-type string
+                :value-type (string string))
   :group 'ess-debug)
-
 
 (defvar ess-dbg-output-buf-prefix " *ess.dbg"
   "The prefix of the buffer name the R debug output is directed to."  )
@@ -728,11 +728,11 @@ This commands are triggered by `ess-dbg-easy-command' ."
 (defun ess-dbg-set-error-action (spec)
   "Set the on-error action. The ACTION should be  one
 of components of `ess-dbg-error-action-alist' (a cons!)."
-  (let ( (proc (get-process ess-current-process-name)))
+  (let ((proc (get-process ess-current-process-name)))
     (if spec
         (progn
           (setq ess-dbg-error-action (car spec))
-          (send-string proc (concat "options(error=" (cdr spec) ")\n"))
+          (ess-command2 (format "options(error= %s )\n" (nth 2 spec) ))
           )
       (error "Unknown action.")
       )
@@ -743,22 +743,26 @@ of components of `ess-dbg-error-action-alist' (a cons!)."
 
 (defun ess-dbg-toggle-error-action ()
   "Toggle the 'on-error' action.
-The list of actions are specified in `ess-dbg-error-action-alist'."
+The list of actions are specified in `ess-dbg-error-action-alist'. "
   (interactive)
   (let* ( (alist ess-dbg-error-action-alist)
           (ev last-command-event)
           (com-char  (event-basic-type ev))
-          actions
+          actions act
           )
     (setq actions (cdr (member (assoc ess-dbg-error-action ess-dbg-error-action-alist)
                                ess-dbg-error-action-alist)))
     (unless actions
       (setq actions ess-dbg-error-action-alist))
-    (ess-dbg-set-error-action (pop actions))
+    (setq act (pop actions))
+    (ess-dbg-set-error-action act)
+    (message "On-error action set to : %s" (cadr act))
     (while  (eq (setq ev (read-event)) com-char)
       (unless actions
         (setq actions ess-dbg-error-action-alist))
-      (ess-dbg-set-error-action (pop actions))
+      (setq act (pop actions))
+      (ess-dbg-set-error-action act)
+      (message "On-error action set to : %s" (cadr act))
       )
     (push ev unread-command-events)
     )
