@@ -1,15 +1,13 @@
 * DONE conditional breakpoints
   CLOSED: [2011-02-10 Thu 16:50]
-* TODO ess-show-traceback should update the input-ring
+* DONE ess-show-traceback should update the input-ring
+  CLOSED: [2011-02-13 Sun 22:36]
 * DONE watch window
   CLOSED: [2011-02-10 Thu 16:50]
 * TODO make ess-eval-region insert the source
 * DONE debug/undebug at point
   CLOSED: [2011-02-10 Thu 16:50]
-* TODO implement the "u" command
 * TODO persistent breakpoints (i.e. activate the display on file load)
 * DONE Make go to last input functionality a ring
   CLOSED: [2010-11-11 Thu 13:54]
 * TODO popup the R buffer on  _errors_ and/or on _debug at_
-
-

@@ -786,13 +786,16 @@ The list of actions are specified in `ess-dbg-error-action-alist'. "
    Mainly useful during/after debugging, to jump to the place
 from where the code was initialy executed.  This is an
 easy-command, which means that after the command is triggered a
-single key event is enough to navigate through the input-event-horn.
+single key event is enough to navigate through the input-event-S-ring.
 If the key-event which triggered the command is Shift modified
-the input-event-horn is traversed backwards.
+the input-event-S-ring is traversed backwards.
 
-The input-event-horn is a virtual object which consists of two
+The input-event-S-ring is a virtual object which consists of two
 rings `ess-dbg-forward-ring' and `ess-dbg-backward-ring' which
-are joint at their tops. " ;; todo: link to the homepage with a pic
+are joint at their tops.
+
+See the more info at http://code.google.com/p/ess-tracebug/#Work-Flow
+"
   (interactive)
   (let* ((ev last-command-event)
         (com-char  (event-basic-type ev))
@@ -1876,7 +1879,7 @@ for more information."
   ;; :type 'string
   )
 
-(defcustom ess-watch-height-threshold 30
+(defcustom ess-watch-height-threshold 40
   "Minimum height for splitting *R* windwow sensibly to make space for watch window.
 Has exactly the same meaning and initial value as `split-height-threshold'."
   :group 'ess-debug
