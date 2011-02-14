@@ -7,7 +7,7 @@
 ;; Created: Oct 14 14:15:22 2010
 ;; Version: 0.2a
 ;; URL:
-;; Keywords: debug, traceback, ESS, R
+;; Keywords: debug, watch, traceback, ESS, R
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1143,7 +1143,7 @@ find a file whose name is produced by (format FMT FILENAME)."
                     default-directory)
                   ;; add current dir of ess here :TODO:
                   )
-        ;; (ess-get-words-from-vector "getwd()\n")))) <- does not work,
+        ;; (ess-get-words-from-vector2 "getwd()\n")))) <- does not work,
         ;; the after-revert-hook calls it recursively! tothink:
         buffer thisdir fmts name)
     (if (file-name-absolute-p filename)
@@ -2207,25 +2207,28 @@ Optional N if supplied gives the number of backward steps."
 (defun ess-dbg-inject-un/debug-commands () ;; fixme: bug: if no starting new-line,ess-command hangs
   (ess-command2 "
 local({
-    .ess_dbg_getTracedAndDebugged <- function(){
-        tr_state <- tracingState(FALSE)
-        on.exit(tracingState(tr_state))
-        generics <- methods::getGenerics()
-        all_traced <- c()
-        for(i in seq_along(generics)){
-            menv <- methods::getMethodsForDispatch(methods::getGeneric(generics[[i]], package=generics@package[[i]]))
+    .ess_dbg_getTracedAndDebugged <-     function(){
+    tr_state <- tracingState(FALSE)
+    on.exit(tracingState(tr_state))
+    generics <- methods::getGenerics()
+    all_traced <- c()
+    for(i in seq_along(generics)){
+        genf <- methods::getGeneric(generics[[i]], package=generics@package[[i]])
+        if(!is.null(genf)){ ## might happen !! v.2.13
+            menv <- methods::getMethodsForDispatch(genf)
             traced <- unlist(eapply(menv, is, 'traceable', all.names=TRUE))
             if(length(traced) && any(traced))
                 all_traced <- c(paste(generics[[i]],':', names(traced)[traced],sep=''), all_traced)
             if(!is.null(tfn<-getFunction(generics[[i]], mustFind=FALSE, where = .GlobalEnv))&&is(tfn,  'traceable')) # if the default is traced,  it does not appear in the menv :()
                 all_traced <- c(generics[[i]], all_traced)
         }
-        debugged <- apropos('.', mode = 'function')
-        ## traced function don't appear here. Not realy needed and would affect performance.
-        debugged <- debugged[which(unlist(lapply(debugged, isdebugged) , recursive=FALSE, use.names=FALSE))]
-        c(debugged, all_traced)
     }
-    .ess_dbg_UntraceOrUndebug <- function(name){
+    debugged <- apropos('.', mode = 'function')
+    ## traced function don't appear here. Not realy needed and would affect performance.
+    debugged <- debugged[which(unlist(lapply(debugged, isdebugged) , recursive=FALSE, use.names=FALSE))]
+    unique(c(debugged, all_traced))
+    }
+   .ess_dbg_UntraceOrUndebug <- function(name){
         tr_state <- tracingState(FALSE)
         on.exit(tracingState(tr_state))
         ## name is a name of a function to be undebugged or has a form name:Class1#Class2#Class3 for traced methods
@@ -2301,13 +2304,14 @@ for signature and trace it with browser tracer."
   (interactive)
   (let ((obj-at-point (word-at-point))
         (tbuffer (get-buffer-create " *ess-command-output*")) ;; output buffer name is hard-coded in ess-inf.el
-        (all-functions (ess-get-words-from-vector "apropos(\".\", mode = \"function\")\n"))
+        (all-functions (ess-get-words-from-vector2 "apropos(\".\", mode = \"function\")\n"))
         (loc-completing-read (if (and ess-dbg-use-ido (featurep 'ido))
                                  (function ido-completing-read)
                                (function completing-read)))
         ufunc signature default-string
         reset-ido out-message
         )
+    (print (length all-functions))
     (when obj-at-point
       (if (member obj-at-point all-functions)
           (setq default-string (concat "(" obj-at-point ")"))
@@ -2327,7 +2331,7 @@ for signature and trace it with browser tracer."
                          all-functions nil t nil nil obj-at-point ))
           ;; check if is generic
           (if (equal "TRUE"
-                     (car (ess-get-words-from-vector  (concat "as.character(isGeneric(\"" ufunc "\"))\n"))))
+                     (car (ess-get-words-from-vector2  (concat "as.character(isGeneric(\"" ufunc "\"))\n"))))
               (save-excursion ;; if so, find teh signature
                 (setq signature (funcall loc-completing-read
                                          (concat "Method for generic '" ufunc "' : ")
@@ -2366,7 +2370,7 @@ for signature and trace it with browser tracer."
                                (function completing-read)))
         reset-ido out-message
         debugged fun)
-    (setq debugged (ess-get-words-from-vector ".ess_dbg_getTracedAndDebugged()\n"))
+    (setq debugged (ess-get-words-from-vector2 ".ess_dbg_getTracedAndDebugged()\n"))
     (if (eq (length debugged) 0)
         (message "No debugged or traced functions/methods found")
       (when  (and ess-dbg-use-ido
@@ -2478,6 +2482,46 @@ for signature and trace it with browser tracer."
           (set-marker (process-mark sprocess) oldpm))
         ))
     ))
+
+(defun ess-get-words-from-vector2 (command &optional no-prompt-check)
+  "Evaluate the S command COMMAND, which returns a character vector.
+Return the elements of the result of COMMAND as an alist of strings.
+COMMAND need *NOT* have a terminating newline.
+
+Improves on ess-get-words-from-vector by dealing with vectors
+with arbitrary length. (max print problem) But assumes that none of
+the words does contain ',!,' substring :)
+"
+  (let ((tbuffer (get-buffer-create
+		  " *ess-get-words*")); initial space: disable-undo
+	words end-pos start-pos)
+    (save-excursion
+      (set-buffer tbuffer)
+      (ess-if-verbose-write (format "ess-get-words*(%s).. " command))
+      (setq command (format "paste({%s}, collapse=',!,')\n" command))
+      (ess-command2 command tbuffer 'sleep no-prompt-check)
+      (ess-if-verbose-write " [ok] ..")
+      (goto-char (point-min))
+      (if (not (looking-at "[ +>]*\\[1\\]"))
+	  (progn (ess-if-verbose-write "not seeing \"[1]\".. ")
+		 (setq words nil)
+                 )
+	(goto-char (point-min))
+        (setq start-pos  (re-search-forward "\"" nil t))
+        (goto-char (point-max))
+        (setq end-pos (re-search-backward "\"" nil t))
+        (setq words (split-string
+                     (buffer-substring-no-properties start-pos end-pos)
+                     ",!,"))
+        )
+      )
+    ;;DBG, do *not* (i.e., comment):
+    ;; (kill-buffer tbuffer)
+    (ess-if-verbose-write
+     (if (> (length words) 5)
+         (format " |-> (length words)= %d\n" (length words))
+       (format " |-> words= '%s'\n" words)))
+    words))
 
 
 ;;;_ * Kludges and Fixes
