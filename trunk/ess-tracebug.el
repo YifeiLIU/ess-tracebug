@@ -998,7 +998,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          (has-end-prompt (string-match "> +\\'" string))
          ) ; current-buffer is still the user's input buffer here
 
-    (process-put proc 'ready has-end-prompt)
+    (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
     (when (and  has-end-prompt wbuff) ;; refresh only if the process is ready and wbuff exists, (not only in the debugger!!)
       (ess-watch-refresh-buffer-visibly wbuff)
@@ -1017,7 +1017,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         )
       )
     ;; SKIP if needed
-    (when match-skip
+    (when (and match-skip) ;; (not dactive))
       (process-send-string proc  "n \n")
       )
     ;; EXIT the debuger
@@ -1035,19 +1035,17 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
       (when wbuff
         (ess-watch-refresh-buffer-visibly wbuff ))
       )
-    ;; ACTIVATE the debugger if entered for the first time
+    ;; COMINT (move up?)
+    (comint-output-filter proc string)
+    ;; ACTIVATE the debugger and trigger EASY COMMANDif entered for the first time
     (when (and (not dactive)
                (or match-jump match-active))
       (unless is-iess
              (ring-insert ess-dbg-forward-ring input-point))
       (process-put proc 'dbg-active t)
+      (ess-dbg-easy-command t)
       )
-    (comint-output-filter proc string)
-    ;; EASY COMMANDS
-    (when match-skip
-      (ess-dbg-easy-command t))
-    )
-  )
+    ))
 
 
 (defun ess-dbg-goto-last-ref-and-mark (dbuff &optional other-window)
@@ -1319,9 +1317,10 @@ Equivalent to 'n' at the R prompt."
     (if (not (process-get proc 'dbg-active))
         (message "Debugging is not active")
       (when (ess-dbg-is-recover)
-        (ess-dbg-command-digit "0")
-        (ess-wait-for-process proc )) ;; get out of recover mode
-      (process-send-string proc "Q\n")
+        (ess-dbg-command-digit "0") ; gets out of recover mode
+        (ess-wait-for-process proc nil t 1))
+      (if (process-get proc 'dbg-active) ; still in debug mode
+          (process-send-string proc "Q\n"))
     )
   ))
 
@@ -1334,8 +1333,10 @@ Equivalent to 'n' at the R prompt."
         (message "Debugging is not active")
       (when (ess-dbg-is-recover)
         (ess-dbg-command-digit "0")
-        (ess-wait-for-process proc)) ;; get out of recover mode
-      (process-send-string proc "c\n")
+        (ess-wait-for-process proc nil t 1)
+        ) ;; get out of recover mode
+      (if (process-get proc 'dbg-active) ; still in debug mode
+          (process-send-string proc "c\n"))
       )
     ))
 
@@ -2398,15 +2399,22 @@ for signature and trace it with browser tracer."
 
 ;;;_ * ESS inf imperfections
 
-(defun ess-wait-for-process (proc &optional sleep force-redisplay)
-  "Wait for the ready property of the process to become non-nil."
+(defun ess-wait-for-process (proc &optional sleep force-redisplay timeout)
+  "Wait for TIMEOUT seconds the 'ready property of the process to become non-nil."
   (if sleep (sleep-for sleep)); we sleep here, *and* wait below
+  (unless timeout
+    (setq timeout 30))
   (accept-process-output proc .5)
-  (while (not (process-get proc 'ready))
-    ;; (message (format "wait:%s" (process-get proc 'ready)))
-    (accept-process-output proc .5)
-    (if force-redisplay (redisplay t))
-    ))
+  (let ((i .5))
+    (while (and (not (process-get proc 'ready))
+                (<= i timeout))
+      ;; (message (format "wait:%s" (process-get proc 'ready)))
+      (accept-process-output proc .5)
+      (if force-redisplay (redisplay t))
+      (setq i (+ 0.5 i))
+      (if (> i timeout)
+          (ess-if-verbose-write (format "\nWaited for %s seconds. Process is bussy or waits for user input." timeout)))
+      )))
 
 
 (defun ordinary-insertion-filter2 (proc string)
@@ -2470,7 +2478,7 @@ for signature and trace it with browser tracer."
                     (sleep-for 0.020); 0.1 is noticeable!
                   ;; else: default
                   (ess-wait-for-process sprocess
-                                        (and do-sleep (* 0.4 sleep))))
+                                        (and do-sleep (* 0.4 sleep)) t)) ;; default time out 30 seconds!
                 ;; (message "command:%s" (process-get sprocess 'ready))
                 (delete-region (point-at-bol) (point-max))
                 )
