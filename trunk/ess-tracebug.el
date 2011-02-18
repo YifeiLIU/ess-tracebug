@@ -1,4 +1,4 @@
-;;; ess-tracebug.el --- Tracing and debugging facilities for ESS.
+;; ess-tracebug.el --- Tracing and debugging facilities for ESS.
 ;;
 ;; Filename: ess-tracebug.el
 ;; Author: Spinu Vitalie
@@ -43,6 +43,33 @@
 ;;; Change log:
 ;;
 ;;
+;; Version 0.2
+;; New features:
+;; 1) Watch window and loggers (http://code.google.com/p/ess-tracebug/#Watch_Window)
+;; 2) Conditional Breakpoints (http://code.google.com/p/ess-tracebug/#Conditional_Breakpoints)
+;; 3) Debug/undebug  on the fly (http://code.google.com/p/ess-tracebug/#Flag/Unflag_for_Debugging)
+;; 4) New recover mode. When user enters the recover command (directly or through recover breakpoint) digit keys
+;;are enabled 0-9 for frame navigation; c,q, n also trigger the exit from recover (0) to be compatible with the
+;;browser mode.
+;;
+;; Important changes:
+;; 1) ess-traceback and ess-debug are now completely merged into single mode ess-tracebug, but internal code is
+;;still divided on conceptual grounds.
+;; 2) Input-ring and debug-ring are renamed to forward-ring and backward-ring and merged into joint structure
+;;called S-ring (http://code.google.com/p/ess-tracebug/#Work-Flow). The M-c d for backward navigation is replaced
+;;by M-c I. M-c d now flags function and methods for debugging.
+;; 3) Considerable effort have been made to make the program more stable. Particularly, ess-tracebug now uses
+;;internal mechanism to check for availability of R process and do not really on ess commands to communicate to the
+;;process. Critical variables, indicating the state of the R process are no longer buffer local but part of process plist.
+;;
+;;
+;; Version 0.1
+;; 1) Visual  navigation during the debugging
+;; 2) Navigation to errors and debug references in inferior buffer
+;; 3) Traceback buffer (M-c `) with links to errors to source code
+;; 4) Browser and Recover breakpoints
+;; 5) Support for custom breakpoints.
+;; 6) On Error action toggling
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Code:
@@ -997,7 +1024,6 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
          (has-end-prompt (string-match "> +\\'" string))
          ) ; current-buffer is still the user's input buffer here
-
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
     (when (and  has-end-prompt wbuff) ;; refresh only if the process is ready and wbuff exists, (not only in the debugger!!)
@@ -2419,7 +2445,7 @@ for signature and trace it with browser tracer."
 
 (defun ordinary-insertion-filter2 (proc string)
   "improved version of ess filter"
-  (with-current-buffer (process-buffer proc)
+  ;; (with-current-buffer (process-buffer proc)
     (let (moving)
       (process-put proc 'ready (string-match "> +\\'" string))
       (setq moving (= (point) (process-mark proc)))
@@ -2429,12 +2455,11 @@ for signature and trace it with browser tracer."
         (insert string)
         (set-marker (process-mark proc) (point)))
       (if moving (goto-char (process-mark proc))))
-    ))
+    )
 
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
 "Improved version of `ess-command'"
   (let* ((sprocess (get-ess-process ess-current-process-name))
-         sbuffer
          do-sleep end-of-output
          oldpb oldpf oldpm
          )
@@ -2446,12 +2471,11 @@ for signature and trace it with browser tracer."
         (setq ess-local-process-name ess-current-process-name)))
     (if (ess-ddeclient-p)
         (ess-command-ddeclient com buf sleep)
-      (setq sbuffer (process-buffer sprocess))
 
       ;; else: "normal", non-DDE behavior:
-
+      ;; (setq sbuffer (process-buffer sprocess))
       (save-excursion
-        (set-buffer sbuffer)
+        ;; (set-buffer sbuffer)
         (ess-if-verbose-write (format "(ess-command2 %s ..)" com))
         (unless (or (process-get sprocess 'ready) no-prompt-check)
           (ess-error
@@ -2477,8 +2501,10 @@ for signature and trace it with browser tracer."
                 (if no-prompt-check
                     (sleep-for 0.020); 0.1 is noticeable!
                   ;; else: default
-                  (ess-wait-for-process sprocess
-                                        (and do-sleep (* 0.4 sleep)) t)) ;; default time out 30 seconds!
+                  (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
+                  (ess-wait-for-process sprocess    ;; default timeout 30 seconds!
+                                        (and do-sleep (* 0.4 sleep))) ;; not visible here! error during redisplay in *R* buffer
+                  )
                 ;; (message "command:%s" (process-get sprocess 'ready))
                 (delete-region (point-at-bol) (point-max))
                 )
