@@ -2396,8 +2396,9 @@ for signature and trace it with browser tracer."
                                  (function ido-completing-read)
                                (function completing-read)))
         reset-ido out-message
-        debugged fun)
+        debugged fun def-val)
     (setq debugged (ess-get-words-from-vector2 ".ess_dbg_getTracedAndDebugged()\n"))
+    (print debugged)
     (if (eq (length debugged) 0)
         (message "No debugged or traced functions/methods found")
       (when  (and ess-dbg-use-ido
@@ -2408,7 +2409,10 @@ for signature and trace it with browser tracer."
         (ido-mode 'buffer))
       (unwind-protect
           (progn
-            (setq fun (funcall loc-completing-read "Un-debug: " debugged nil t nil nil "*ALL*"))
+            (setq def-val (if (eq (length debugged) 1)
+                              (car debugged)
+                            "*ALL*"))
+            (setq fun (funcall loc-completing-read "Un-debug: " debugged nil t nil nil def-val))
             (if (equal fun "*ALL*" )
                 (ess-command2 (concat ".ess_dbg_UndebugALL(c(\"" (mapconcat '(lambda (x) x) debugged "\", \"") "\"))\n") tbuffer)
               (ess-command2 (concat ".ess_dbg_UntraceOrUndebug(\"" fun "\")\n") tbuffer)
@@ -2555,7 +2559,11 @@ the words does contain ',!,' substring :)
      (if (> (length words) 5)
          (format " |-> (length words)= %d\n" (length words))
        (format " |-> words= '%s'\n" words)))
-    words))
+    (if (and (eq (length words) 1)
+             (equal (car words) ""))
+        nil
+      words)
+    ))
 
 
 ;;;_ * Kludges and Fixes
