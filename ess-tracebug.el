@@ -278,16 +278,18 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
       (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
       )
     (ad-activate 'ess-eval-region)
+    (add-hook 'ess-send-input-hook 'move-last-input-on-send-input t t)
     ;; (ad-activate 'ess-eval-linewise)
-    (ad-activate 'inferior-ess-send-input)
+    ;; (ad-activate 'inferior-ess-send-input)
     (setq ess-tracebug-p t)
     )
-)
+  )
 
 (defun ess-tb-stop ()
   "Stop ess traceback session in the current ess process"
   (with-current-buffer (process-buffer (get-process ess-current-process-name))
-    (ad-deactivate 'inferior-ess-send-input)
+    (remove-hook 'ess-send-input-hook 'move-last-input-on-send-input t)
+    ;; (ad-deactivate 'inferior-ess-send-input)
     (ad-deactivate 'ess-eval-region)
     ;; (ad-deactivate 'ess-eval-linewise)
     (if (local-variable-p 'ess-tb-last-input-overlay)
@@ -299,7 +301,7 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
     (kill-local-variable 'compilation-error-regexp-alist)
     (kill-local-variable 'compilation-search-path)
     (setq ess-tracebug-p nil)
-  ))
+    ))
 
 (defvar ess-R-tb-regexp-alist '(R R3 R-recover)
   "List of symbols which are looked up in `compilation-error-regexp-alist-alist'.")
@@ -345,7 +347,7 @@ You can bound 'no-select' versions of this commands  for convenience:
       (make-local-variable 'compilation-search-path)
       (setq compilation-search-path ess-dbg-search-path)
       (compilation-minor-mode 1)
-      ;(use-local-map ess-traceback-minor-mode-map)
+                                        ;(use-local-map ess-traceback-minor-mode-map)
       (pop-to-buffer trbuf)
       ;; tracebug keys
       (local-set-key ess-tracebug-command-prefix ess-tracebug-map)
@@ -361,101 +363,101 @@ You can bound 'no-select' versions of this commands  for convenience:
 (defun ess-tb-next-error-goto-process-marker ()
   ;; assumes current buffer is the process buffer with compilation enabled
   ;; used in ess-tb-next-error-function
-;  (with-current-buffer (process-buffer (get-process ess-local-process-name)) ; already in comint buffer .. no need
-    (comint-goto-process-mark)
-    (set-window-point (get-buffer-window) (point))  ;moves the cursor
-    ;; FIXME: Should jump to current-debug-position,  but messes the things if in recover
-    ;; (when (ess-dbg-is-active)
-    ;;   (ess-dbg-goto-current-debug-position)
-    ;;   )
-)
+                                        ;  (with-current-buffer (process-buffer (get-process ess-local-process-name)) ; already in comint buffer .. no need
+  (comint-goto-process-mark)
+  (set-window-point (get-buffer-window) (point))  ;moves the cursor
+  ;; FIXME: Should jump to current-debug-position,  but messes the things if in recover
+  ;; (when (ess-dbg-is-active)
+  ;;   (ess-dbg-goto-current-debug-position)
+  ;;   )
+  )
 
 (defun ess-tb-next-error-function (n &optional reset)
-    "Advance to the next error message and visits the file.
+  "Advance to the next error message and visits the file.
 This is the value of `next-error-function' in iESS buffers."
-;; Modified version of `compilation-next-error-function'.
-    (interactive "p")
-    (if reset  (goto-char (point-max)))
-    (let* ((columns compilation-error-screen-columns) ; buffer's local value
-           ;; (proc (or (get-buffer-process (current-buffer))
-           ;;                         (error "Current buffer has no process")))
-           (last 1) timestamp
-           (n (or n 1))
-           (beg-pos  ; from where the search for next error starts
-            (if (and (>= n 0)
-                     (comint-after-pmark-p))
-                ess-tb-last-input
-              (point)
-              )
+  ;; Modified version of `compilation-next-error-function'.
+  (interactive "p")
+  (if reset  (goto-char (point-max)))
+  (let* ((columns compilation-error-screen-columns) ; buffer's local value
+         ;; (proc (or (get-buffer-process (current-buffer))
+         ;;                         (error "Current buffer has no process")))
+         (last 1) timestamp
+         (n (or n 1))
+         (beg-pos  ; from where the search for next error starts
+          (if (and (>= n 0)
+                   (comint-after-pmark-p))
+              ess-tb-last-input
+            (point)
             )
-           (loc (condition-case err
-                    (compilation-next-error n  nil beg-pos)
-                  (error
-                   (ess-tb-next-error-goto-process-marker)
-                   (error "Passed beyond last reference");(error-message-string err))
-                   )))
-           (loc (if (or (eq n 0)
-                        (> (point) ess-tb-last-input))
-                    loc
-                  (ess-tb-next-error-goto-process-marker)
-                  (error "Passed beyond last-input marker")))
-           (end-loc (nth 2 loc))
-           (marker (point-marker))
-           )
-      (setq compilation-current-error (point-marker)
-            overlay-arrow-position (if (bolp)
-                                       compilation-current-error
-                                     (copy-marker (line-beginning-position)))
-            loc (car loc))
-      ;; If loc contains no marker, no error in that file has been visited.
-      ;; If the marker is invalid the buffer has been killed.
-      ;; If the file is newer than the timestamp, it has been modified
-      ;; (`omake -P' polls filesystem for changes and recompiles when needed
-      ;;  in the same process and buffer).
-      ;; So, recalculate all markers for that file.
-      (unless (and (nth 3 loc) (marker-buffer (nth 3 loc))
-                   ;; There may be no timestamp info if the loc is a `fake-loc'.
-                   ;; So we skip the time-check here, although we should maybe
-                   ;; change `compilation-fake-loc' to add timestamp info.
-                   (nth 4 loc)          ;++
+          )
+         (loc (condition-case err
+                  (compilation-next-error n  nil beg-pos)
+                (error
+                 (ess-tb-next-error-goto-process-marker)
+                 (error "Passed beyond last reference");(error-message-string err))
+                 )))
+         (loc (if (or (eq n 0)
+                      (> (point) ess-tb-last-input))
+                  loc
+                (ess-tb-next-error-goto-process-marker)
+                (error "Passed beyond last-input marker")))
+         (end-loc (nth 2 loc))
+         (marker (point-marker))
+         )
+    (setq compilation-current-error (point-marker)
+          overlay-arrow-position (if (bolp)
+                                     compilation-current-error
+                                   (copy-marker (line-beginning-position)))
+          loc (car loc))
+    ;; If loc contains no marker, no error in that file has been visited.
+    ;; If the marker is invalid the buffer has been killed.
+    ;; If the file is newer than the timestamp, it has been modified
+    ;; (`omake -P' polls filesystem for changes and recompiles when needed
+    ;;  in the same process and buffer).
+    ;; So, recalculate all markers for that file.
+    (unless (and (nth 3 loc) (marker-buffer (nth 3 loc))
+                 ;; There may be no timestamp info if the loc is a `fake-loc'.
+                 ;; So we skip the time-check here, although we should maybe
+                 ;; change `compilation-fake-loc' to add timestamp info.
+                 (nth 4 loc)          ;++
                                         ; VS: here  4th loc is always nil,  and changes are not recoreded
                                         ; can't figure out when the markers (3rd loc) and timestamps (4th loc) are set
                                         ; so recalculate if 4th loc is nil.
-                   (or (null (nth 4 loc))
-                       (equal (nth 4 loc)
-                              (setq timestamp
-                                    (with-current-buffer
-                                        (marker-buffer (nth 3 loc))
-                                      (visited-file-modtime))))))
-        (with-current-buffer
-            (compilation-find-file marker (caar (nth 2 loc))
-                                   (cadr (car (nth 2 loc))))
-          (save-restriction
-            (widen)
-            (goto-char (point-min))
-            ;; Treat file's found lines in forward order, 1 by 1.
-            (dolist (line (reverse (cddr (nth 2 loc))))
-              (when (car line)		; else this is a filename w/o a line#
-                (beginning-of-line (- (car line) last -1))
-                (setq last (car line)))
-              ;; Treat line's found columns and store/update a marker for each.
-              (dolist (col (cdr line))
-                (if (car col)
-                    (if (eq (car col) -1)	; special case for range end
-                        (end-of-line)
-                      (compilation-move-to-column (car col) columns))
-                  (beginning-of-line)
-                  (skip-chars-forward " \t"))
-                (if (nth 3 col)
-                    (set-marker (nth 3 col) (point))
-                  (setcdr (nthcdr 2 col) `(,(point-marker)))))))
-          ))
-      (compilation-goto-locus marker (nth 3 loc) (nth 3 end-loc))
-      (setcdr (nthcdr 3 loc) (list timestamp))
-      (setcdr (nthcdr 4 loc) t))
-    )
+                 (or (null (nth 4 loc))
+                     (equal (nth 4 loc)
+                            (setq timestamp
+                                  (with-current-buffer
+                                      (marker-buffer (nth 3 loc))
+                                    (visited-file-modtime))))))
+      (with-current-buffer
+          (compilation-find-file marker (caar (nth 2 loc))
+                                 (cadr (car (nth 2 loc))))
+        (save-restriction
+          (widen)
+          (goto-char (point-min))
+          ;; Treat file's found lines in forward order, 1 by 1.
+          (dolist (line (reverse (cddr (nth 2 loc))))
+            (when (car line)		; else this is a filename w/o a line#
+              (beginning-of-line (- (car line) last -1))
+              (setq last (car line)))
+            ;; Treat line's found columns and store/update a marker for each.
+            (dolist (col (cdr line))
+              (if (car col)
+                  (if (eq (car col) -1)	; special case for range end
+                      (end-of-line)
+                    (compilation-move-to-column (car col) columns))
+                (beginning-of-line)
+                (skip-chars-forward " \t"))
+              (if (nth 3 col)
+                  (set-marker (nth 3 col) (point))
+                (setcdr (nthcdr 2 col) `(,(point-marker)))))))
+        ))
+    (compilation-goto-locus marker (nth 3 loc) (nth 3 end-loc))
+    (setcdr (nthcdr 3 loc) (list timestamp))
+    (setcdr (nthcdr 4 loc) t))
+  )
 
-(print "<- traceback done")
+(ess-if-verbose-write "\n<- traceback done")
 
 ;;;_ + ADVICING
 ;;; (needed to implement the last user input functionality)
@@ -549,21 +551,23 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
                                         ; (ad-activate 'ess-eval-region)
                                         ; (ad-unadvise 'ess-eval-region)
 
-(defadvice inferior-ess-send-input (after move-last-input)
-  "Move the `ess-tb-last-input' marker and
-  `ess-tb-last-input-overlay' to apropriate positions.'"
-  (save-excursion
-    (goto-char comint-last-input-start)
-     (setq ess-tb-last-input (point))
+(defun move-last-input-on-send-input ()
+    (setq ess-tb-last-input (point))
     (inferior-ess-move-last-input-overlay)
-    )
   )
 
-;;ad-activate 'inferior-ess-send-input)
-;;(ad-deactivate 'inferior-ess-send-input)
+
+;; (defadvice inferior-ess-send-input (after move-last-input)
+;;   "Move the `ess-tb-last-input' marker and
+;;   `ess-tb-last-input-overlay' to apropriate positions.'"
+;;   (move-last-input-on-send-input)
+;;   )
+
+;; ;;ad-activate 'inferior-ess-send-input)
+;; (ad-deactivate 'inferior-ess-send-input)
 
 
-(print "<- advising done")
+(ess-if-verbose-write "\n<- advising done")
 
 
 ;;;_* DEBUGER
@@ -582,7 +586,7 @@ Customize this variable to change the default behavior.
 See `ess-dbg-error-action-alist' for more."
   ;; :type 'string
   ;; :group 'ess-debug)
-)
+  )
 
 (defcustom  ess-dbg-error-action-alist
   '(( "-" "NONE"       "NULL" )
@@ -748,7 +752,7 @@ This commands are triggered by `ess-dbg-easy-command' ."
   "Ring of markers to the positions from which `ess-dbg-goto-input-point' is called.
  See the also `ess-dbg-goto-debug-point'")
 
-(print "<- debug-vars done")
+(ess-if-verbose-write "\n<- debug-vars done")
 
 ;;;_ + debug functions
 (defun ess-dbg-set-error-action (spec)
@@ -825,9 +829,9 @@ See the more info at http://code.google.com/p/ess-tracebug/#Work-Flow
 "
   (interactive)
   (let* ((ev last-command-event)
-        (com-char  (event-basic-type ev))
-        (ring-el 0)
-        input-point)
+         (com-char  (event-basic-type ev))
+         (ring-el 0)
+         input-point)
     (if (memq 'shift (event-modifiers ev))
         (setq input-point (ring-ref ess-dbg-backward-ring 0))
       (ring-insert ess-dbg-backward-ring (point-marker)) ;; insert in backward ring ;;todo: check if the marker to this (close by?) position is already in the ring
@@ -867,9 +871,9 @@ This is an easy-command. Shift triggers the opposite traverse
 of the ring."
   (interactive)
   (let* ((debug-point (ring-ref ess-dbg-backward-ring 0))
-        (ev last-command-event)
-        (com-char  (event-basic-type ev))
-        (ring-el 0))
+         (ev last-command-event)
+         (com-char  (event-basic-type ev))
+         (ring-el 0))
     (if (ess-dbg-is-active)
         (progn
           (switch-to-buffer (marker-buffer ess-dbg-current-debug-position))
@@ -901,7 +905,7 @@ of the ring."
   "Inserts point-marker into the forward-ring."
   (ring-insert ess-dbg-forward-ring (point-marker))
   (message "Point inserted into the forward-ring")
-)
+  )
 
 (defun ess-dbg-start ()
   "Start the debug session.
@@ -920,7 +924,7 @@ watch and loggers.  Integrates into ESS and iESS modes by binding
     (set-process-filter proc 'inferior-ess-dbg-output-filter)
     (with-current-buffer (process-buffer proc)
       (if (member ess-dialect '("XLS" "SAS" "STA"))
-        (error "Can not activate the debuger for %s dialect" ess-dialect)
+          (error "Can not activate the debuger for %s dialect" ess-dialect)
         )
       (setq mode-line-process '(" ["
                                 ess-local-process-name
@@ -942,7 +946,7 @@ watch and loggers.  Integrates into ESS and iESS modes by binding
             ess-dbg-current-ref (point-marker)  ;; used by goto-error functionality
             ess-dbg-last-ref-marker (point-marker)  ;; gives marker to reference of the last debugged line
             )
-;;      (beginning-of-line)
+      ;;      (beginning-of-line)
       (setq buffer-read-only t)
       )
     (define-key ess-mode-map ess-tracebug-command-prefix ess-tracebug-map)
@@ -1020,14 +1024,20 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          (match-skip (and match-active
                           (match-string 1 string)))
          (match-recover (and match-active
-                          (match-string 3 string))) ;; Selection:
+                             (match-string 3 string))) ;; Selection:
          ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
          (has-end-prompt (string-match "> +\\'" string))
          ) ; current-buffer is still the user's input buffer here
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
+    ;; COMINT (move up?)
+    ;; (comint-output-filter proc string) ;; fixme!! this does not work under windows at least!!!! modify!!
+    (ordinary-insertion-filter proc string)
     (when (and  has-end-prompt wbuff) ;; refresh only if the process is ready and wbuff exists, (not only in the debugger!!)
-      (ess-watch-refresh-buffer-visibly wbuff)
+      ;; (ess-watch-refresh-buffer-visibly wbuff)
+      ;; (ess-command "str(iris)\n")
+      (ess-command ".ess_watch_eval\n")
+      (message (concat string "...\n"))
       )
     ;; JUMP to line if debug expression was matched
     (when match-jump
@@ -1061,13 +1071,11 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
       (when wbuff
         (ess-watch-refresh-buffer-visibly wbuff ))
       )
-    ;; COMINT (move up?)
-    (comint-output-filter proc string)
     ;; ACTIVATE the debugger and trigger EASY COMMANDif entered for the first time
     (when (and (not dactive)
                (or match-jump match-active))
       (unless is-iess
-             (ring-insert ess-dbg-forward-ring input-point))
+        (ring-insert ess-dbg-forward-ring input-point))
       (process-put proc 'dbg-active t)
       (ess-dbg-easy-command t)
       )
@@ -1245,10 +1253,10 @@ given by the reference.  This is the value of
 `next-error-function' in *ess.dbg* buffers."
   (interactive "p")
   (if reset
-       (set-marker ess-dbg-current-ref ess-dbg-last-ref-marker))
+      (set-marker ess-dbg-current-ref ess-dbg-last-ref-marker))
   (let ((loc (ess-dbg-get-next-ref n nil ess-dbg-current-ref))  ;; moves point to next/prev ref if any
                                         ; loc is  (file . line_nr)
-         dbuff
+        dbuff
         )
     (if loc
         (progn
@@ -1319,7 +1327,7 @@ If suplied ev must be a proper key event or a string representing the digit."
           (move-marker (process-mark proc) (max-char))
           )
       (message "Recover is not active")
-    ))
+      ))
   )
 
 (defun ess-dbg-command-n (&optional ev)
@@ -1347,8 +1355,8 @@ Equivalent to 'n' at the R prompt."
         (ess-wait-for-process proc nil t 1))
       (if (process-get proc 'dbg-active) ; still in debug mode
           (process-send-string proc "Q\n"))
-    )
-  ))
+      )
+    ))
 
 (defun ess-dbg-command-c (&optional ev)
   "Continue the code execution.
@@ -1391,16 +1399,16 @@ Equivalent to 'n' at the R prompt."
     (ess-force-buffer-current "R process to use: ")
     )
   (when buffer-file-name
-      (save-buffer)
-      (save-selected-window
-        (ess-switch-to-ESS t)
-        )
-      (ess-dbg-set-last-input)
-      (process-send-string (get-process ess-current-process-name)
-                           (concat "\ninvisible(eval({source(file=\"" buffer-file-name
-                                   "\")\n cat(\"Sourced: " buffer-file-name "\\n\")}, env=globalenv()))\n")
-                           )
+    (save-buffer)
+    (save-selected-window
+      (ess-switch-to-ESS t)
       )
+    (ess-dbg-set-last-input)
+    (process-send-string (get-process ess-current-process-name)
+                         (concat "\ninvisible(eval({source(file=\"" buffer-file-name
+                                 "\")\n cat(\"Sourced: " buffer-file-name "\\n\")}, env=globalenv()))\n")
+                         )
+    )
   )
 
 ;;;_ + BREAKPOINTS
@@ -1443,29 +1451,29 @@ Equivalent to 'n' at the R prompt."
 
 
 (defcustom ess-bp-type-spec-alist
-      '((browser "browser()" "B>\n"   filled-square  ess-bp-fringe-browser-face)
-        (recover "browser();recover()" "R>\n"   filled-square  ess-bp-fringe-recover-face)
-        )
-      "List of lists of breakpoint types.
+  '((browser "browser()" "B>\n"   filled-square  ess-bp-fringe-browser-face)
+    (recover "browser();recover()" "R>\n"   filled-square  ess-bp-fringe-recover-face)
+    )
+  "List of lists of breakpoint types.
 Each sublist  has five elements:
 1- symbol giving the name of specification
 2- R expression to be inserted
 3- string to be displayed instead of the expression
 4- fringe bitmap to use
 5- face for fringe and displayed string."
-      :group 'ess-debug
-      :type '(alist :key-type symbol
-                    :value-type (group string string symbol face)
-                    )
-      )
+  :group 'ess-debug
+  :type '(alist :key-type symbol
+                :value-type (group string string symbol face)
+                )
+  )
 
 (defcustom ess-bp-inactive-spec
-      '(inactive     "##"    filled-square  ess-bp-fringe-inactive-face)
-      "List giving the inactive breakpoint specifications."
-;; List format is identical to that of the elements of
-;; `ess-bp-type-spec-alist' except that the second element giving
-;; the R expression is meaningless here." ;;fixme: second element is missing make it nil for consistency with all other specs
-      :group 'ess-debug)
+  '(inactive     "##"    filled-square  ess-bp-fringe-inactive-face)
+  "List giving the inactive breakpoint specifications."
+  ;; List format is identical to that of the elements of
+  ;; `ess-bp-type-spec-alist' except that the second element giving
+  ;; the R expression is meaningless here." ;;fixme: second element is missing make it nil for consistency with all other specs
+  :group 'ess-debug)
 
 (defcustom ess-bp-conditional-spec
   '(conditional     "browser(expr={%s})"  "CB[ %s ]>\n"  question-mark  ess-bp-fringe-browser-face)
@@ -1478,7 +1486,7 @@ elements of the specifications."
 
 (defcustom ess-bp-logger-spec
   '(logger     ".ess_log_eval('%s')"  "L[ \"%s\" ]>\n"  hollow-square  ess-bp-fringe-logger-face)
-    "List giving the loggers specifications.
+  "List giving the loggers specifications.
 List format is identical to that of `ess-bp-type-spec-alist'."
   :group 'ess-debug)
 
@@ -1570,7 +1578,7 @@ Use `ess-bp-previous-position' in programs."
         (if dist-down
             (cons pos-start (next-single-property-change pos-start 'ess-bp nil (window-end)))
           )
-          ;(message "No breakpoints in the visible area"))
+                                        ;(message "No breakpoints in the visible area"))
         ))))
 
 
@@ -1640,7 +1648,7 @@ to the current position, nil if not found. "
       (indent-for-tab-command)
       (goto-char (1- init-pos))
       (if (eq (point) (point-at-eol)) (forward-char))
-  ))
+      ))
   )
 
 (defun ess-bp-kill-all nil
@@ -1712,7 +1720,7 @@ to the current position, nil if not found. "
   (let ((cur-pos (point))
         (bp-pos (next-single-property-change (point) 'ess-bp)))
     (if bp-pos
-            (goto-char bp-pos)
+        (goto-char bp-pos)
       ;; else start searching from the beggining of buffer
       (setq bp-pos (next-single-property-change (point-min) 'ess-bp nil (point)))
       (if (equal bp-pos (point))
@@ -1918,7 +1926,7 @@ Has exactly the same meaning and initial value as `split-width-threshold'."
   :group 'ess-debug
   :type 'integer)
 
-(defcustom  ess-watch-scale-amount -2
+(defcustom  ess-watch-scale-amount -1
   "The number of steps to scale the watch font down (up).
 Each step scales the height of the default face in the watch
 window by the variable `text-scale-mode-step' (a negative number
@@ -2505,7 +2513,7 @@ for signature and trace it with browser tracer."
                 (if no-prompt-check
                     (sleep-for 0.020); 0.1 is noticeable!
                   ;; else: default
-                  (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
+                  ;; (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
                   (ess-wait-for-process sprocess    ;; default timeout 30 seconds!
                                         (and do-sleep (* 0.4 sleep))) ;; not visible here! error during redisplay in *R* buffer
                   )
@@ -2517,8 +2525,10 @@ for signature and trace it with browser tracer."
           ;; Restore old values for process filter
           (set-process-buffer sprocess oldpb)
           (set-process-filter sprocess oldpf)
-          (set-marker (process-mark sprocess) oldpm))
-        ))
+          (set-marker (process-mark sprocess) oldpm oldpb) ;; need oldpb here!!! otherwise it is not set for some reason
+          )
+        )
+      )
     ))
 
 (defun ess-get-words-from-vector2 (command &optional no-prompt-check)
@@ -2619,7 +2629,7 @@ intanbible, step char backward first"
 
 
 
-(print "<- debug done")
+(ess-if-verbose-write "\n<- debug done")
 (provide 'ess-tracebug)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ess-tracebug.el ends here
