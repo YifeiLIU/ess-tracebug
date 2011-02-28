@@ -1031,13 +1031,10 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
     ;; COMINT (move up?)
-    ;; (comint-output-filter proc string) ;; fixme!! this does not work under windows at least!!!! modify!!
-    (ordinary-insertion-filter proc string)
+    (comint-output-filter proc string)
+    ;; (ordinary-insertion-filter proc string)
     (when (and  has-end-prompt wbuff) ;; refresh only if the process is ready and wbuff exists, (not only in the debugger!!)
-      ;; (ess-watch-refresh-buffer-visibly wbuff)
-      ;; (ess-command "str(iris)\n")
-      (ess-command ".ess_watch_eval\n")
-      (message (concat string "...\n"))
+      (ess-watch-refresh-buffer-visibly wbuff)
       )
     ;; JUMP to line if debug expression was matched
     (when match-jump
@@ -2470,7 +2467,7 @@ for signature and trace it with browser tracer."
     )
 
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
-"Improved version of `ess-command'"
+"Improved version of `ess-command'. Should be used when `ess-tracebug' is on."
   (let* ((sprocess (get-ess-process ess-current-process-name))
          do-sleep end-of-output
          oldpb oldpf oldpm
