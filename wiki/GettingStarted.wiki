@@ -118,8 +118,9 @@ For more info on the work-flow please see the main page [http://code.google.com/
 
 == Watch and Loggers ==
 
-Press "M-c w" to open the watch window. First what you see is a list of available commands. You can add arbitrary expressions to watch.
-You can add (a), insert (a), move up (u), down (U), kill (k), edit (e) and rename (r) expressions in that buffer.
+Press "M-c w" to open the watch window. First what you see is a list of available commands.
+You can add (a), insert (a), move up (u), down (U), kill (k), edit (e) and rename (r) expressions in that buffer. 
+Any valid R expression can be traced in the watch window.
 To quit the watch press "q".
 
 <img src="https://ess-tracebug.googlecode.com/svn/trunk/img/watch.png" width=700>
@@ -129,5 +130,6 @@ The watch window is continuously updated to show the current state of the variab
 Loggers look like usual breakpoints but don't stop the execution. If you have any expressions in your watch list
 they log them into a list in the global environment.
 
-Press "M-c l" and introduce the name of the variable to store the watch output. Source and run the code. Now you
-can inspect the state of the variable.
+Press "M-c l". You will be asked for the name of the variable to store the output. Introduce any valid R name. Source and run the code. 
+Now you
+can inspect the state of the variable directly from the R environment.
