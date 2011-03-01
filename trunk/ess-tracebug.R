@@ -117,11 +117,16 @@ assign('.ess_log_eval',  function(log_name){
     .essWEnames <- allNames(.ess_watch_expressions)
     cur_log <- list()
     .parent_frame <- parent.frame()
-    for(i in seq_along(.ess_watch_expressions))
+    for(i in seq_along(.ess_watch_expressions)){
+        capture.output({
         cur_log[[i]] <-
             tryCatch(eval(.ess_watch_expressions[[i]]), envir = .parent_frame,
                      error = function(e) paste('Error:', e$message, '\n'),
                      warning = function(w) paste('warning: ', w$message, '\n'))
+        if(is.null(cur_log[i][[1]]))
+            cur_log[i] <- list(NULL)
+                   })
+    }
     names(cur_log) <- .essWEnames
     assign(log_name, c(log, list(cur_log)), envir = .GlobalEnv)
     invisible(NULL)
