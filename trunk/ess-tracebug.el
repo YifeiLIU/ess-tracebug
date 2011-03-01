@@ -30,7 +30,8 @@
 ;;
 ;; Features that might be required by this library:
 ;;
-;;   ESS
+;;   ESS - required
+;;   ido, face-remap, cl -  desirable and are part of default emacs
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -75,7 +76,7 @@
 ;;; Code:
 
 (require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
-(require 'ido nil t) ;; desireble for debug/undebug at point functionality
+(require 'ido nil t) ;; desirable for debug/undebug at point functionality
 (require 'cl) ;; a couple of useful functions
 
 (defgroup ess-tracebug nil
@@ -1757,8 +1758,8 @@ assign('.ess_watch_eval', function(){
     }
     if(length(.ess_watch_expressions) == 0L){
         cat('\n# Watch list is empty!\n
-# a     append new expression
-# i     insert new expression
+# a       append new expression
+# i       insert new expression
 # k       kill
 # e       edit the expression
 # r       rename
