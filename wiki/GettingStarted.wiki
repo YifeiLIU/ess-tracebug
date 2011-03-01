@@ -76,7 +76,8 @@ also trigger the exit.
 
 Go to `test.R` and remove all the breakpoints ("M-c K"). Source the file ("M-c s").
 
-Press "M-c d" and type "lm_test" :
+Press "M-c d" and type "lm_test"  RET:
+
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/flag2.png" width=500>
 
 This flags the "lm_test" function for the debugging. Go to "main.R" ("M-c i") and execute the code again.
@@ -85,6 +86,11 @@ The visual debugger should start jumping again.
 To undebug press "M-c u".
 
 You also can trace/untrace S4 methods in this way.
+
+Note that the interactive mechanism of this feature is based on [http://www.emacswiki.org/emacs/InteractivelyDoThings IDO] which is part of emacs. If you are using other completion mechanisms (like _Icicles_) this feature might not work as desired. If that is the case, put the following into your `.emacs` :
+{{{
+(setq ess-dbg-use-ido nil)
+}}}
 
 == Traceback Buffer ==
 
