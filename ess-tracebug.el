@@ -1748,13 +1748,17 @@ to the current position, nil if not found. "
 
 (defun ess-watch-inject-commands ()
   (ess-command2 "
+if(!exists('.ess_watch_expressions')){
+   assign('.ess_watch_expressions', list(), envir = .GlobalEnv)
+}
 assign('.ess_watch_eval', function(){
     if(!exists('.ess_watch_expressions')){
         assign('.ess_watch_expressions', list(), envir = .GlobalEnv)
     }
     if(length(.ess_watch_expressions) == 0L){
         cat('\n# Watch list is empty!\n
-# a/i     append/insert new expression
+# a     append new expression
+# i     insert new expression
 # k       kill
 # e       edit the expression
 # r       rename
@@ -1775,24 +1779,28 @@ assign('.ess_watch_eval', function(){
                      warning = function(w) cat('warning: ', w$message, '\n' ))
         }}
 }, envir = .BaseNamespaceEnv); environment(.ess_watch_eval)<-.GlobalEnv;
+
 assign('.ess_log_eval',  function(log_name){
-    if(exists('.ess_watch_expressions', envir= .GlobalEnv, inherits=F) &&
-        length(.ess_watch_expressions)>0L){
     if(!exists(log_name, envir = .GlobalEnv, inherits = FALSE))
         assign(log_name, list(), envir = .GlobalEnv)
     log <- get(log_name, envir = .GlobalEnv, inherits = FALSE)
     .essWEnames <- allNames(.ess_watch_expressions)
     cur_log <- list()
     .parent_frame <- parent.frame()
-    for(i in seq_along(.ess_watch_expressions))
+    for(i in seq_along(.ess_watch_expressions)){
+        capture.output({
         cur_log[[i]] <-
             tryCatch(eval(.ess_watch_expressions[[i]]), envir = .parent_frame,
                      error = function(e) paste('Error:', e$message, '\n'),
                      warning = function(w) paste('warning: ', w$message, '\n'))
+        if(is.null(cur_log[i][[1]]))
+            cur_log[i] <- list(NULL)
+                   })
+    }
     names(cur_log) <- .essWEnames
     assign(log_name, c(log, list(cur_log)), envir = .GlobalEnv)
     invisible(NULL)
-}}, envir = .BaseNamespaceEnv)
+}, envir = .BaseNamespaceEnv)
 environment(.ess_log_eval) <- .GlobalEnv
 "))
 
@@ -2300,15 +2308,17 @@ local({
   (let ((tbuffer (get-buffer-create " *ess-command-output*")); initial space: disable-undo
         signatures curr-point)
     (save-excursion
-      (set-buffer tbuffer)
-      (erase-buffer)
       (ess-if-verbose-write (format "ess-get-signatures*(%s).. " method))
       (ess-command2 (concat "showMethods(\"" method "\")\n") tbuffer)
+      (message ess-local-process-name)
+      (message ess-current-process-name)
       (ess-if-verbose-write " [ok] ..\n")
+      (set-buffer tbuffer)
       (goto-char (point-min))
       (if (not (re-search-forward "Function:" nil t))
           (progn (ess-if-verbose-write "not seeing \"Function:\".. \n")
-                 (error "Cannot trace  method '%s' (Is it a primitive method which you have already traced?)" method)
+                 (error (buffer-string))
+                 ;; (error "Cannot trace  method '%s' (Is it a primitive method which you have already traced?)" method)
                  )
         ;; (setq curr-point (point))
         ;; (while (re-search-forward ", " nil t) ;replace all ", " with  ":" for better redability in completion buffers??
@@ -2343,7 +2353,6 @@ for signature and trace it with browser tracer."
         ufunc signature default-string
         reset-ido out-message
         )
-    (print (length all-functions))
     (when obj-at-point
       (if (member obj-at-point all-functions)
           (setq default-string (concat "(" obj-at-point ")"))
@@ -2370,12 +2379,13 @@ for signature and trace it with browser tracer."
                                          (ess-dbg-get-signatures ufunc) ;;signal error if not found
                                          nil t nil nil "*default*"))
                 (if (equal signature "*default*")
-                    (ess-command2 (concat "trace(\"" ufunc "\", tracer = browser)\n") tbuffer) ;debug the default ufunc
+                    (progn
+                      (ess-command2 (concat "trace(\"" ufunc "\", tracer = browser)\n") tbuffer) ;debug the default ufunc
+                      )
                   (ess-command2 (concat "trace(\"" ufunc "\", tracer = browser, signature = c(" signature "))\n") tbuffer)
                   )
                 (set-buffer tbuffer)
-                (goto-char (point-min))
-                (setq out-message (buffer-substring-no-properties (point) (point-at-eol))) ;; gives appropriate message or error
+                (setq out-message (buffer-substring-no-properties (point-min) (point-max))) ;; gives appropriate message or error
                 )
             ;; not generic
             (save-excursion
@@ -2383,7 +2393,7 @@ for signature and trace it with browser tracer."
               (set-buffer tbuffer)
               (if (= (point-max) 1)
                   (setq out-message (format "Flagged function '%s' for debugging" ufunc))
-                (setq out-message (buffer-substring-no-properties (point) (point-max))) ;; error occurred
+                (setq out-message (buffer-substring-no-properties (point-min) (point-max))) ;; error occurred
                 ))
             ))
       (when reset-ido
@@ -2467,22 +2477,26 @@ for signature and trace it with browser tracer."
     )
 
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
-"Improved version of `ess-command'. Should be used when `ess-tracebug' is on."
-  (let* ((sprocess (get-ess-process ess-current-process-name))
+  "Improved version of `ess-command'. Intended to be used when ess-tracebug is on"
+  ;; the ddeclient-p checks needs to use the local-process-name
+  (unless buf
+    (setq buf (get-buffer-create " *ess-command-output*")))
+  (with-current-buffer buf
+    (unless ess-local-process-name
+      (setq ess-local-process-name ess-current-process-name)))
+  ;; local-process-name must be used
+  ;; if multiple  processes are used, current-process-name might not be the process of current buffer
+  ;; (stumbled on this in mark-for-debug function)
+  ;; todo: report to ess-core
+  (let* ((sprocess (get-ess-process (or ess-local-process-name
+                                        ess-current-process-name)))
          do-sleep end-of-output
          oldpb oldpf oldpm
          )
-    ;; the ddeclient-p checks needs to use the local-process-name
-    (unless buf
-      (setq buf (get-buffer-create " *ess-command-output*")))
-    (with-current-buffer buf
-      (unless ess-local-process-name
-        (setq ess-local-process-name ess-current-process-name)))
     (if (ess-ddeclient-p)
         (ess-command-ddeclient com buf sleep)
 
       ;; else: "normal", non-DDE behavior:
-      ;; (setq sbuffer (process-buffer sprocess))
       (save-excursion
         ;; (set-buffer sbuffer)
         (ess-if-verbose-write (format "(ess-command2 %s ..)" com))
