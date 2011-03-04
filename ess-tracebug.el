@@ -5,7 +5,7 @@
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
 ;; Created: Oct 14 14:15:22 2010
-;; Version: 0.2a
+;; Version: 0.2
 ;; URL:
 ;; Keywords: debug, watch, traceback, ESS, R
 ;;
@@ -36,7 +36,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Commentary:
-;;
+;;  Ess-tracebug is a package for interactive debugging of R code from
+;;ESS and provides such features as:
+;;- visual debugging
+;;- browser, recover and conditional  breakpoints
+;;- watch window and loggers
+;;- on the fly  debug/undebug of R functions and methods
+;;- highlighting of error source references and easy error navigation
+;;- interactive traceback.
+;;For a complete description please see the
+;;documentation at http://code.google.com/p/ess-tracebug/
 ;;
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -78,6 +87,8 @@
 (require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
 (require 'ido nil t) ;; desirable for debug/undebug at point functionality
 (require 'cl) ;; a couple of useful functions
+
+(defvar ess-tracebug-version 0.2)
 
 (defgroup ess-tracebug nil
   "Error navigation and debugging for ESS.
@@ -333,10 +344,12 @@ You can bound 'no-select' versions of this commands  for convenience:
   (ring-insert ess-dbg-forward-ring (point-marker))
   (ess-force-buffer-current "R process to use: ")
   (let ((trbuf  (get-buffer-create "*ess-traceback*")))
-    (setq next-error-last-buffer trbuf) ;; need to avoid
-    (set-buffer trbuf)
-    (toggle-read-only -1)
+    (setq next-error-last-buffer trbuf)
+    (with-current-buffer trbuf
+      (setq buffer-read-only nil)
+      )
     (ess-command2  "try(traceback(), silent=TRUE);cat(\n\"---------------------------------- \n\", geterrmessage(), fill=TRUE)\n" trbuf)
+    (set-buffer trbuf) ;; don't move this before ess-command2! mess up multiple processes'
     (if (string= "No traceback available" (buffer-substring 1 23))
         (message "No traceback available")
       (ess-dirs)
@@ -356,7 +369,7 @@ You can bound 'no-select' versions of this commands  for convenience:
       (local-set-key "\C-c\C-s" 'ess-watch-switch-process)
       (local-set-key "\C-c\C-y" 'ess-switch-to-ESS)
       (local-set-key "\C-c\C-z" 'ess-switch-to-end-of-ESS)
-      (toggle-read-only 1)
+      (setq buffer-read-only nil)
       )
     )
   )
