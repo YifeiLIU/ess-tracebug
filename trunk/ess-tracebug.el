@@ -249,7 +249,13 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
   "If non-nil, long prompt '> > > > > + + + + > ' is split."
   :group 'ess-traceback)
 
+(defcustom inferior-ess-replace-long+ t
+  "If non-nil,  '+ + + + ' containing more than 3 + is replaced by `ess-long+replace'"
+  :group 'ess-traceback)
 
+(defcustom ess-long+replace "+ ... + "
+  "Replacement used for long + prompt."
+  :group 'ess-traceback)
 
 (defmacro ess-copy-key (from-map to-map fun)
   `(define-key ,to-map
@@ -562,7 +568,7 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
     )
   )
 
-                                        ; (ad-activate 'ess-eval-region)
+;;(ad-activate 'ess-eval-region)
                                         ; (ad-unadvise 'ess-eval-region)
 
 (defun move-last-input-on-send-input ()
@@ -1044,7 +1050,10 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          ) ; current-buffer is still the user's input buffer here
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
-    ;; COMINT (move up?)
+    (if inferior-ess-replace-long+
+        (setq string (replace-regexp-in-string "\\(\\+ \\)\\{3\\}\\(\\+ \\)+" ess-long+replace string))
+      )
+    ;; COMINT
     (comint-output-filter proc string)
     ;; (ordinary-insertion-filter proc string)
     (when (and  has-end-prompt wbuff) ;; refresh only if the process is ready and wbuff exists, (not only in the debugger!!)
