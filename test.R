@@ -3,18 +3,14 @@ lm_test <-
               model = TRUE, x = FALSE, y = FALSE, qr = TRUE, singular.ok = TRUE,
               contrasts = NULL, offset, ...)
 {
-    ret.x <- x
+    ret.x <- x,
     ret.y <- y
     cl <- match.call()
-    ##:ess-bp-start::browser:##
-browser()##:ess-bp-end:##
     mf <- match.call(expand.dots = FALSE)
     m <- match(c("formula", "data", "subset", "weights", "na.action",
                  "offset"), names(mf), 0L)
     mf <- mf[c(1L, m)]
     mf$drop.unused.levels <- TRUE
-    ##:ess-bp-start::recover:##
-browser();recover()##:ess-bp-end:##
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
     if (method == "model.frame")

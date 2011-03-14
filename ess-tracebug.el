@@ -87,6 +87,7 @@
 (require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
 (require 'ido nil t) ;; desirable for debug/undebug at point functionality
 (require 'cl) ;; a couple of useful functions
+(require 'overlay)
 
 (defvar ess-tracebug-version 0.2)
 
@@ -561,8 +562,8 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
       (when (and inferior-ess-split-long-prompt
                  (> (current-column) 2)
                  (looking-back "> "))
-        (backward-char 2)
-        (insert "> \n")
+          (backward-char 2)
+          (insert " \n")
         )
       )
     )
@@ -654,9 +655,8 @@ Elements should be directory names, not file names of directories.
 
 (defvar ess-dbg-current-debug-position (make-marker)
   "Marker to the current debugged line.
- It always point to the
-beginning of the currently debugged line and is used by  overlay-arrow.")
-(add-to-list 'overlay-arrow-variable-list 'ess-dbg-current-debug-position)
+ It always point to the beginning of the currently debugged line
+and is used by overlay-arrow.")
 
 (defface ess-dbg-current-debug-line-face
   '((((class grayscale)
