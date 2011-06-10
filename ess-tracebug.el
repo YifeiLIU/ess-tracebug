@@ -2384,7 +2384,7 @@ for signature and trace it with browser tracer."
     (when  (and ess-dbg-use-ido
                 (featurep 'ido )
                 (not ido-mode))
-      ;; start an ido mode if needed, completions for methods are difficult without it
+      ;; start an ido mode if needed, completion for methods is difficult without it
       (setq reset-ido t)
       (ido-mode 'buffer))
     (unwind-protect
