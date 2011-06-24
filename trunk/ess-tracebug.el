@@ -83,11 +83,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Code:
+(eval-when-compile
+  (require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
+  (require 'ido nil t) ;; desirable for debug/undebug at point functionality
+  (require 'overlay)
+  (require 'cl))
 
-(require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
-(require 'ido nil t) ;; desirable for debug/undebug at point functionality
-(require 'cl) ;; a couple of useful functions
-(require 'overlay)
 
 (defvar ess-tracebug-version 0.2)
 
@@ -245,6 +246,10 @@ activated/deactivate separately with `ess-traceback' and
   "Marker pointing to the last user input position in iESS buffer.
 This is the place where `ess-tb-last-input-overlay' is moved.
 Local in iESS buffers with `ess-traceback' mode enabled.")
+
+(defvar ess-tb-last-input-overlay nil
+  "Overlay to highlight the position of last input in iESS buffer.
+Local in iESS buffers.")
 
 (defcustom inferior-ess-split-long-prompt t
   "If non-nil, long prompt '> > > > > + + + + > ' is split."
@@ -1178,7 +1183,7 @@ associated buffer. If FILE is nil returns nil.
     )
   )
 
-(defun ess-dbg-find-file (filename &rest directory formats)
+(defun ess-dbg-find-file (filename &optional directory formats)
   "Find a buffer for file FILENAME.
 If FILENAME is not found at all, ask the user where to find it if
 `ess-dbg-ask-for-file' is non-nil.  Search the directories in
@@ -1284,7 +1289,11 @@ given by the reference.  This is the value of
           (set-marker overlay-arrow-position (line-beginning-position))
           (setq dbuff (ess-dbg-find-file  (car loc)))
           (switch-to-buffer dbuff)
-          (goto-line (cdr loc))
+          (save-restriction
+            (widen)
+            (goto-char 1)
+            (forward-line (1- (cdr loc)))
+            )
           (move-marker ess-dbg-current-debug-position (line-beginning-position))
           (back-to-indentation)
           )
@@ -1661,7 +1670,7 @@ to the current position, nil if not found. "
   (let ((pos (ess-bp-get-bp-position-nearby))
         (init-pos (make-marker)))
     (if (null pos)
-        (if (called-interactively-p) (message "No breakpoint nearby"))
+        (if (called-interactively-p 'any) (message "No breakpoint nearby"))
       (set-marker init-pos (1+ (point)))
       (goto-char (car pos))
       (delete-region (car pos) (cdr pos))
@@ -1699,7 +1708,7 @@ to the current position, nil if not found. "
     (let ((pos (ess-bp-get-bp-position-nearby))
           (fringe-face (nth 3 ess-bp-inactive-spec))
           (inhibit-point-motion-hooks t)  ;; deactivates intangible property
-          beg-pos-dummy end-pos-comment bp-specs)
+          beg-pos-dummy end-pos-comment bp-specs beg-pos-command)
       (if (null pos)
           (message "No breakpoints in the visible region")
         (goto-char (car pos))
@@ -2029,14 +2038,13 @@ string giving the actual R expression."
 (defun ess-watch-parse-assoc (al)
   "Return a string of the form 'assign(\".ess_watch_expressions\", list(a = parse(expr_a), b= parse(expr_b)), envir = .GlobalEnv)'
 ready to be send to R process. AL is an association list as return by `ess-watch-make-alist'"
-  (setq tte (concat "assign(\".ess_watch_expressions\", list("
-                    (mapconcat '(lambda (el)
-                                  (if (> (length  (cadr el) ) 0)
-                                      (concat "`" (cadr el) "` = parse(text = '" (caddr el) "')")
-                                    (concat "parse(text = '" (caddr el) "')")))
-                               al ", ")
-                    "), envir = .GlobalEnv)\n"))
-  )
+  (concat "assign(\".ess_watch_expressions\", list("
+          (mapconcat '(lambda (el)
+                        (if (> (length  (cadr el) ) 0)
+                            (concat "`" (cadr el) "` = parse(text = '" (caddr el) "')")
+                          (concat "parse(text = '" (caddr el) "')")))
+                     al ", ")
+          "), envir = .GlobalEnv)\n"))
 
 (defun ess-watch-install-.ess_watch_expressions ()
   ;; this is used when ever watches are added/deleted/modified in any fashion.
