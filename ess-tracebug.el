@@ -292,6 +292,7 @@ Local in iESS buffers.")
     (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
     (compilation-setup t)
     (setq next-error-function 'ess-tb-next-error-function)
+    ;; new locals
     (make-local-variable 'ess-tb-last-input)
     (make-local-variable 'ess-tb-last-input-overlay)
     (make-local-variable 'compilation-search-path)
@@ -301,6 +302,11 @@ Local in iESS buffers.")
       (setq ess-tb-last-input (point))
       (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
       )
+    (make-local-variable 'ess-busy-prompt-timer)
+    ;; busy prompt timer
+    (setq ess-busy-prompt-timer (run-with-timer 5 2 'ess-display-busy-prompt))
+    (add-hook 'kill-buffer-hook '(lambda () (cancel-timer ess-busy-prompt-timer)))
+    ;; advices
     (ad-activate 'ess-eval-region)
     (add-hook 'ess-send-input-hook 'move-last-input-on-send-input t t)
     ;; (ad-activate 'ess-eval-linewise)
@@ -1014,6 +1020,38 @@ Kill the *ess.dbg.[R_name]* buffer."
   )
 
 
+(defvar ess-busy-prompt 0
+  "Integer giving the state of the waiting prompt.")
+(make-variable-buffer-local 'ess-busy-prompt)
+(defvar ess-busy-prompt-overlay nil
+  "Overlay to represent the busy prompt.")
+(make-variable-buffer-local 'ess-busy-prompt-overlay)
+
+(defun ess-display-busy-prompt ()
+  "Display rotating bar instead of prompt if ess-process is busy."
+  (let ((pb (get-buffer-process (current-buffer))))
+    (when pb
+      ;; (print (process-get pb 'ready))
+      (if (process-get pb 'ready)
+          (if (local-variable-p 'ess-busy-prompt-overlay)
+              (delete-overlay ess-busy-prompt-overlay))
+        (let ((disp_start (process-mark pb ))
+              busy_char)
+          (setq ess-busy-prompt (mod (1+ ess-busy-prompt) 3)) ;;buf local value increment
+          (setq busy_char
+                (cond ((eq ess-busy-prompt 1) "--")
+                      ((eq ess-busy-prompt 2) "\\")
+                      ((eq ess-busy-prompt 0) "/")
+                      ))
+          (if (local-variable-p 'ess-busy-prompt-overlay)
+              (move-overlay ess-busy-prompt-overlay disp_start (1+ disp_start))
+            (setq ess-busy-prompt-overlay (make-overlay disp_start (1+ disp_start)))
+            (overlay-put ess-busy-prompt-overlay 'face 'font-lock-constant-face)
+            )
+          ;; (message "here")
+          (overlay-put ess-busy-prompt-overlay 'before-string busy_char)
+          )))))
+
 (defun ess-dbg-is-active ()
   "Return t if the current R process is in active debugging state."
   (process-get (get-process ess-current-process-name) 'dbg-active)
@@ -1042,7 +1080,8 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          (pbuff (process-buffer proc))
          (dbuff (process-get proc 'dbg-buffer))
          (wbuff (get-buffer ess-watch-buffer))
-         (dactive (process-get proc 'dbg-active))
+         (was-active (process-get proc 'dbg-active))
+         (was-in-recover (process-get proc 'is-recover))
          (input-point (point-marker))
          (match-jump (string-match ess-dbg-regexp-jump string))
          (match-active (string-match ess-dbg-regexp-active string))
@@ -1078,11 +1117,11 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         )
       )
     ;; SKIP if needed
-    (when (and match-skip) ;; (not dactive))
+    (when (and match-skip (not was-in-recover)) ;; (not was-active))
       (process-send-string proc  "n \n")
       )
     ;; EXIT the debuger
-    (when (and dactive
+    (when (and was-active
                (not (or match-jump match-active))
                has-end-prompt)
       ;; (with-current-buffer dbuff ;; uncomment to see the value of STRING just before  debugger exists
@@ -1097,7 +1136,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
         (ess-watch-refresh-buffer-visibly wbuff ))
       )
     ;; ACTIVATE the debugger and trigger EASY COMMANDif entered for the first time
-    (when (and (not dactive)
+    (when (and (not was-active)
                (or match-jump match-active))
       (unless is-iess
         (ring-insert ess-dbg-forward-ring input-point))
@@ -1653,7 +1692,7 @@ to the current position, nil if not found. "
 
 
 (defun ess-bp-set-conditional (condition)
-  (interactive "sCondition : ")
+  (interactive "sBreakpoint condition: ")
   (ess-bp-create 'conditional condition)
   (indent-for-tab-command)
   )
@@ -2047,9 +2086,10 @@ ready to be send to R process. AL is an association list as return by `ess-watch
           "), envir = .GlobalEnv)\n"))
 
 (defun ess-watch-install-.ess_watch_expressions ()
-  ;; this is used when ever watches are added/deleted/modified in any fashion.
-  ;; there is no other way to insert info into R's .ess_watch_expressions object'
-  ;; !! assumes R watch being the current buffer, otherwise will most likely install empty list.
+  ;; used whenever watches are added/deleted/modified from the watch
+  ;; buffer. this is the only way  to insert expressions into
+  ;; .ess_watch_expressions object in R. Assumes R watch being the current
+  ;; buffer, otherwise will most likely install empty list.
   (interactive)
   (process-send-string (get-ess-process ess-current-process-name)
                        (ess-watch-parse-assoc (ess-watch-make-alist)))
@@ -2066,8 +2106,10 @@ Arguments IGNORE and NOCONFIRM currently not used."
 (defun ess-watch-refresh-buffer-visibly (wbuf &optional sleep no-prompt-check)
   "Eval `ess-watch-command' and direct the output into the WBUF.
 Call `ess-watch-buffer-show' to make the buffer visible, without
-selecting it.  This function is primarily intended for refreshing
-the watch window during the debugging."
+selecting it.
+
+This function is used for refreshing the watch window after each step during
+the debugging."
   ;; assumes that the ess-watch-mode is on!!
   ;; particularly ess-watch-current-block-overlay is installed
   (interactive)
@@ -2085,10 +2127,10 @@ the watch window during the debugging."
       )))
 
 (defun ess-watch-buffer-show (buffer-or-name)
-  "This is the main function to make watch buffer BUFFER-OR-NAME visible.
+  "Make watch buffer BUFFER-OR-NAME visible, and position acordingly.
 If already visible, do nothing.
 
-Currently the only positioning rule implemented si to split the R
+Currently the only positioning rule implemented is to split the R
 process window in half.  The behavior is controlled by
 `split-window-sensibly' with parameters `split-height-threshold'
 and `split-width-threshold' replaced by
@@ -2210,7 +2252,6 @@ Optional N if supplied gives the number of backward steps."
     (insert (concat "\n" ess-watch-start-block " " name " -@\n" ess-watch-start-expression " " expr "\n"))
     (setq buffer-read-only t)
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly (current-buffer))
     ))
 
 (defun ess-watch-insert ()
@@ -2226,7 +2267,6 @@ Optional N if supplied gives the number of backward steps."
     (insert (concat "\n" ess-watch-start-block " " name " -@\n" ess-watch-start-expression " " expr "\n"))
     (setq buffer-read-only t)
     (ess-watch-install-.ess_watch_expressions)
-    (ess-watch-refresh-buffer-visibly (current-buffer))
     ))
 
 (defun ess-watch-move-up ()
@@ -2240,7 +2280,6 @@ Optional N if supplied gives the number of backward steps."
       (re-search-backward ess-watch-start-block nil t 1) ;; current block was deleted, point is at the end of previous block
       (insert wbl)
       (ess-watch-install-.ess_watch_expressions)
-      (ess-watch-refresh-buffer-visibly (current-buffer))
       (setq buffer-read-only t)
       )))
 
@@ -2260,7 +2299,6 @@ Optional N if supplied gives the number of backward steps."
         (goto-char (match-beginning 0)))
       (insert wbl)
       (ess-watch-install-.ess_watch_expressions)
-      (ess-watch-refresh-buffer-visibly (current-buffer))
       (setq buffer-read-only t)
       )))
 
@@ -2270,10 +2308,9 @@ Optional N if supplied gives the number of backward steps."
   (setq buffer-read-only nil)
   (apply 'delete-region (ess-watch-block-limits-at-point))
   (ess-watch-install-.ess_watch_expressions)
-  (ess-watch-refresh-buffer-visibly (current-buffer))
   )
 
-;;;_ + Un/Debug at point
+;;;_ + Debug/Undebug at point
 
 (defun ess-dbg-inject-un/debug-commands () ;; fixme: bug: if no starting new-line,ess-command hangs
   (ess-command2 "
