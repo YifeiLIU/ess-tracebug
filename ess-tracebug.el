@@ -302,9 +302,10 @@ Local in iESS buffers.")
       (setq ess-tb-last-input (point))
       (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
       )
-    (make-local-variable 'ess-busy-prompt-timer)
     ;; busy prompt timer
-    (setq ess-busy-prompt-timer (run-with-timer 5 2 'ess-display-busy-prompt))
+    (make-local-variable 'ess-busy-prompt-timer)
+    (setq ess-busy-prompt-timer
+          (run-with-timer 5 .5 (ess--make-busy-prompt-function (get-buffer-process (current-buffer)))))
     (add-hook 'kill-buffer-hook '(lambda () (cancel-timer ess-busy-prompt-timer)))
     ;; advices
     (ad-activate 'ess-eval-region)
@@ -330,6 +331,7 @@ Local in iESS buffers.")
     (font-lock-fontify-buffer)
     (kill-local-variable 'compilation-error-regexp-alist)
     (kill-local-variable 'compilation-search-path)
+    (cancel-timer ess-busy-prompt-timer)
     (setq ess-tracebug-p nil)
     ))
 
@@ -495,23 +497,37 @@ This is the value of `next-error-function' in iESS buffers."
 ;;; (needed to implement the last user input functionality)
 ;;; Complete redefining of  eval-region is needed to avoid messing the debugger.
 ;;; New eval-region  flushes all blank lines and trailing \n's.
+
+(defun ess-process-send-string (string process)
+  (unless process
+    (setq process (get-process ess-current-process-name)))
+  (if (stringp process)
+      (setq process (get-process process)))
+  (process-put sprocess 'ready nil)
+  (setq string (replace-regexp-in-string
+                "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
+  (setq string
+        (replace-regexp-in-string  "^.*\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
+  (if (and (count )))
+  (print string)
+  (process-send-string process (concat string "\n"))
+  )
+
 (defun ess-eval-region (start end toggle &optional message)
-  "Send the current region to the inferior ESS process.
+    "Send the current region to the inferior ESS process.
 With prefix argument toggle the meaning of `ess-eval-visibly-p';
 this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
-  (interactive "r\nP")
-  ;;(untabify (point-min) (point-max))
-  ;;(untabify start end); do we really need to save-excursion?
-  (ess-force-buffer-current "Process to load into: ")
-  (message "Starting evaluation...")
+    (interactive "r\nP")
+    ;;(untabify (point-min) (point-max))
+    ;;(untabify start end); do we really need to save-excursion?
+    (ess-force-buffer-current "Process to load into: ")
+    (message "Sending region to process...")
 
   (if (ess-ddeclient-p)
       (ess-eval-region-ddeclient start end 'even-empty)
     ;; else: "normal", non-DDE behavior:
     (let ((visibly (if toggle (not ess-eval-visibly-p) ess-eval-visibly-p))
           (string (buffer-substring-no-properties start end)))
-      (setq string (replace-regexp-in-string
-                    "\\(\n+\\s *\\'\\)\\|\\(^\\s *\n\\)" "" string))  ;; delete empty lines and trailing \ns
       (if visibly
 	  (ess-eval-linewise string)
 	(if ess-synchronize-evals
@@ -519,9 +535,9 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
 			       (or message "Eval region"))
 	  ;; else [almost always!]
 	  (let ((sprocess (get-ess-process ess-current-process-name)))
-	    (process-send-string sprocess (concat string "\n")))))))
+	    (ess-process-send-string (concat string "\n") sprocess))))))
 
-  (message "Finished evaluation")
+  (message "Region sent to process")
   (if (and (fboundp 'deactivate-mark) ess-eval-deactivate-mark)
       (deactivate-mark))
   ;; return value
@@ -1027,30 +1043,44 @@ Kill the *ess.dbg.[R_name]* buffer."
   "Overlay to represent the busy prompt.")
 (make-variable-buffer-local 'ess-busy-prompt-overlay)
 
-(defun ess-display-busy-prompt ()
+(defun ess--make-busy-prompt-function (pb)
   "Display rotating bar instead of prompt if ess-process is busy."
-  (let ((pb (get-buffer-process (current-buffer))))
-    (when pb
-      ;; (print (process-get pb 'ready))
-      (if (process-get pb 'ready)
-          (if (local-variable-p 'ess-busy-prompt-overlay)
-              (delete-overlay ess-busy-prompt-overlay))
-        (let ((disp_start (process-mark pb ))
-              busy_char)
-          (setq ess-busy-prompt (mod (1+ ess-busy-prompt) 3)) ;;buf local value increment
-          (setq busy_char
-                (cond ((eq ess-busy-prompt 1) "--")
-                      ((eq ess-busy-prompt 2) "\\")
-                      ((eq ess-busy-prompt 0) "/")
-                      ))
-          (if (local-variable-p 'ess-busy-prompt-overlay)
-              (move-overlay ess-busy-prompt-overlay disp_start (1+ disp_start))
-            (setq ess-busy-prompt-overlay (make-overlay disp_start (1+ disp_start)))
-            (overlay-put ess-busy-prompt-overlay 'face 'font-lock-constant-face)
-            )
-          ;; (message "here")
-          (overlay-put ess-busy-prompt-overlay 'before-string busy_char)
-          )))))
+  `(lambda ()
+     (let ((pb ,pb))
+       (when (eq (process-status pb) 'run) ;; only when the process is alive
+         (with-current-buffer (process-buffer pb)
+           (if (process-get pb 'ready)
+               (when (and (local-variable-p 'ess-busy-prompt-overlay)
+                          (overlay-buffer ess-busy-prompt-overlay))
+                 (delete-overlay ess-busy-prompt-overlay))
+             (when (eq (point-max) (point))
+                 (insert " ")
+                 (backward-char))
+             (let ((disp_start (point-max))
+                   busy_char)
+               (setq ess-busy-prompt (mod (1+ ess-busy-prompt) 3)) ;;buf local value increment
+               (setq busy_char
+                     (cond ((eq ess-busy-prompt 1) " \\ ")
+                           ((eq ess-busy-prompt 2) " / ")
+                           ((eq ess-busy-prompt 0) (concat " " (char-to-string ?\u2014) " "))
+                           ))
+               (setq busy_char (propertize busy_char
+                           'face font-lock-constant-face
+                           'font-lock-face font-lock-constant-face))
+               (if (local-variable-p 'ess-busy-prompt-overlay)
+                   (move-overlay ess-busy-prompt-overlay disp_start disp_start)
+                 (setq ess-busy-prompt-overlay (make-overlay disp_start disp_start))
+                 ;; (overlay-put ess-busy-prompt-overlay 'display "aaa")
+                 (overlay-put ess-busy-prompt-overlay 'font-lock-face 'font-lock-keyword-face)
+                 )
+               (overlay-put ess-busy-prompt-overlay 'after-string busy_char)
+               (redisplay t)
+               )
+             )
+           )))))
+
+;; (ess--make-busy-prompt-function (get-process "R"))
+
 
 (defun ess-dbg-is-active ()
   "Return t if the current R process is in active debugging state."
@@ -2529,7 +2559,6 @@ for signature and trace it with browser tracer."
           (ess-if-verbose-write (format "\nWaited for %s seconds. Process is bussy or waits for user input." timeout)))
       )))
 
-
 (defun ordinary-insertion-filter2 (proc string)
   "improved version of ess filter"
   ;; (with-current-buffer (process-buffer proc)
@@ -2588,6 +2617,7 @@ for signature and trace it with browser tracer."
                         (and ess-cmd-delay sleep)))
                 (erase-buffer)
                 (set-marker (process-mark sprocess) (point-min))
+                (process-put sprocess 'ready nil)
                 (process-send-string sprocess com)
                 (if no-prompt-check
                     (sleep-for 0.020); 0.1 is noticeable!
