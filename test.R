@@ -3,7 +3,7 @@ lm_test <-
               model = TRUE, x = FALSE, y = FALSE, qr = TRUE, singular.ok = TRUE,
               contrasts = NULL, offset, ...)
 {
-    ret.x <- x
+    ret.x <- x,
     ret.y <- y
     cl <- match.call()
     mf <- match.call(expand.dots = FALSE)
@@ -20,8 +20,6 @@ lm_test <-
                          method), domain = NA)
     mt <- attr(mf, "terms")
     y <- model.response(mf, "numeric")
-    ##:ess-bp-start::browser:##
-browser()##:ess-bp-end:##
     w <- as.vector(model.weights(mf))
     if (!is.null(w) && !is.numeric(w))
         stop("'weights' must be a numeric vector")

@@ -329,7 +329,7 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
     (make-local-variable 'ess--was-busy)
     (setq mode-line-buffer-identification
           (list (car (propertized-buffer-identification "%3b"))
-                `(:eval (propertize (nth ess--busy-count ess-busy-strings) 'face 'mode-line-buffer-id))))
+                `(:eval  (nth ess--busy-count ess-busy-strings)))) ;; 'face 'mode-line-buffer-id))))
     (make-local-variable 'ess--busy-timer)
     (setq ess--busy-timer
           (run-with-timer 2 .5 (ess--make-busy-timer-function (get-buffer-process (current-buffer)))))
