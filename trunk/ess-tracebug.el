@@ -2684,12 +2684,8 @@ the words does contain ',!,' substring :)
 ;;   (ess-eval-linewise (concat string "\n") invisibly nil ess-eval-empty))
 
 
-(defun ess-process-send-string (string process)
-  (unless process
-    (setq process (get-process ess-current-process-name)))
-  (if (stringp process)
-      (setq process (get-process process)))
-  (process-put sprocess 'ready nil)
+(defun ess-process-send-string (process string)
+  (process-put process 'ready nil)
   (setq string (replace-regexp-in-string
                 "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
   (setq string
@@ -2746,7 +2742,7 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
 	(if ess-synchronize-evals
 	    (ess-eval-linewise string (or message "Eval region"))
 	  ;; else [almost always!]
-          (ess-process-send-string string sprocess)))
+          (ess-process-send-string sprocess string)))
       (with-current-buffer (process-buffer sprocess)
         (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
           (setq ess-tb-last-input last-input-mark)
