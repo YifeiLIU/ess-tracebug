@@ -251,6 +251,13 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
   "Overlay to highlight the position of last input in iESS buffer.
 Local in iESS buffers.")
 
+(defvar ess--busy-char 32
+  "Char to indicate the state of busy prompt.")
+(make-variable-buffer-local 'ess--busy-char)
+
+(defvar ess--busy-timer nil
+  "Timer used for busy process indication")
+
 (defcustom inferior-ess-split-long-prompt t
   "If non-nil, long prompt '> > > > > + + + + > ' is split."
   :group 'ess-traceback)
@@ -288,6 +295,7 @@ Local in iESS buffers.")
     (if (member ess-dialect '("XLS" "SAS" "STA"))
         (error "Can not activate the debuger for %s dialect" ess-dialect)
       )
+    (setq comint-process-echoes nil) ;; kludge in R code :todo report bug
     (make-local-variable 'compilation-error-regexp-alist)
     (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
     (compilation-setup t)
@@ -302,11 +310,14 @@ Local in iESS buffers.")
       (setq ess-tb-last-input (point))
       (setq ess-tb-last-input-overlay (ess-tb-make-last-input-overlay  (point-at-bol) (max (1+ (point)) (point-at-eol))))
       )
-    ;; busy prompt timer
-    (make-local-variable 'ess-busy-prompt-timer)
-    (setq ess-busy-prompt-timer
-          (run-with-timer 5 .5 (ess--make-busy-prompt-function (get-buffer-process (current-buffer)))))
-    (add-hook 'kill-buffer-hook '(lambda () (cancel-timer ess-busy-prompt-timer)))
+    ;; busy timer
+    (make-local-variable 'ess--was-busy)
+    (setq mode-line-buffer-identification (list (car (propertized-buffer-identification "%3b"))
+                                                `(:eval (propertize (format " %c   " ess--busy-char) 'face 'mode-line-buffer-id))))
+    (make-local-variable 'ess--busy-timer)
+    (setq ess--busy-timer
+          (run-with-timer 5 .5 (ess--make-busy-timer-function (get-buffer-process (current-buffer)))))
+    (add-hook 'kill-buffer-hook '(lambda () (cancel-timer ess--busy-timer)))
     ;; advices
     (ad-activate 'ess-eval-region)
     (add-hook 'ess-send-input-hook 'move-last-input-on-send-input t t)
@@ -319,6 +330,7 @@ Local in iESS buffers.")
 (defun ess-tb-stop ()
   "Stop ess traceback session in the current ess process"
   (with-current-buffer (process-buffer (get-process ess-current-process-name))
+    (setq ess-tracebug-p nil)
     (remove-hook 'ess-send-input-hook 'move-last-input-on-send-input t)
     ;; (ad-deactivate 'inferior-ess-send-input)
     (ad-deactivate 'ess-eval-region)
@@ -331,8 +343,8 @@ Local in iESS buffers.")
     (font-lock-fontify-buffer)
     (kill-local-variable 'compilation-error-regexp-alist)
     (kill-local-variable 'compilation-search-path)
-    (cancel-timer ess-busy-prompt-timer)
-    (setq ess-tracebug-p nil)
+    (cancel-timer ess--busy-timer)
+    (setq mode-line-buffer-identification (propertized-buffer-identification "%12b"))
     ))
 
 (defvar ess-R-tb-regexp-alist '(R R3 R-recover)
@@ -1036,47 +1048,29 @@ Kill the *ess.dbg.[R_name]* buffer."
   )
 
 
-(defvar ess-busy-prompt 0
-  "Integer giving the state of the waiting prompt.")
-(make-variable-buffer-local 'ess-busy-prompt)
-(defvar ess-busy-prompt-overlay nil
-  "Overlay to represent the busy prompt.")
-(make-variable-buffer-local 'ess-busy-prompt-overlay)
-
-(defun ess--make-busy-prompt-function (pb)
+(defun ess--make-busy-timer-function (process)
   "Display rotating bar instead of prompt if ess-process is busy."
   `(lambda ()
-     (let ((pb ,pb))
+     (let ((pb ,process))
        (when (eq (process-status pb) 'run) ;; only when the process is alive
          (with-current-buffer (process-buffer pb)
-           (if (process-get pb 'ready)
-               (when (and (local-variable-p 'ess-busy-prompt-overlay)
-                          (overlay-buffer ess-busy-prompt-overlay))
-                 (delete-overlay ess-busy-prompt-overlay))
-             (when (eq (point-max) (point))
-                 (insert " ")
-                 (backward-char))
-             (let ((disp_start (point-max))
-                   busy_char)
-               (setq ess-busy-prompt (mod (1+ ess-busy-prompt) 3)) ;;buf local value increment
-               (setq busy_char
-                     (cond ((eq ess-busy-prompt 1) " \\ ")
-                           ((eq ess-busy-prompt 2) " / ")
-                           ((eq ess-busy-prompt 0) (concat " " (char-to-string ?\u2014) " "))
-                           ))
-               (setq busy_char (propertize busy_char
-                           'face font-lock-constant-face
-                           'font-lock-face font-lock-constant-face))
-               (if (local-variable-p 'ess-busy-prompt-overlay)
-                   (move-overlay ess-busy-prompt-overlay disp_start disp_start)
-                 (setq ess-busy-prompt-overlay (make-overlay disp_start disp_start))
-                 ;; (overlay-put ess-busy-prompt-overlay 'display "aaa")
-                 (overlay-put ess-busy-prompt-overlay 'font-lock-face 'font-lock-keyword-face)
-                 )
-               (overlay-put ess-busy-prompt-overlay 'after-string busy_char)
-               (redisplay t)
-               )
-             )
+           (setq ess--busy-char
+                 (if (process-get pb 'ready)
+                     (progn
+                       (when ess--was-busy
+                         (force-mode-line-update)
+                         (setq ess--was-busy nil))
+                       32)
+                   (setq ess--was-busy t)
+                   (force-mode-line-update)
+                   (case ess--busy-char
+                     (nil ?\u2014)
+                     (32 ?\u2014) ;space
+                     (47 ?\u2014) ;slash > dash
+                     (?\u2014 92) ;dash > backslash
+                     (92 47); backslash > slash
+                     )
+                   ))
            )))))
 
 ;; (ess--make-busy-prompt-function (get-process "R"))
@@ -2736,6 +2730,45 @@ intanbible, step char backward first"
 ;;         (ess-bp-remove-all-current-buffer)
 ;;         (setq buffers (cdr buffers))))))
 
+
+(defun inferior-R-input-sender (proc string)
+  ;; next line only for debugging: this S_L_O_W_S D_O_W_N [here AND below]
+  ;;(ess-write-to-dribble-buffer (format "(inf..-R-..): string='%s'; " string))
+  ;; rmh: 2002-01-12 catch page() in R
+  (save-current-buffer
+    (let ((help-string (or (string-match inferior-R-1-input-help string)
+                           (string-match inferior-R-2-input-help string)))
+          (page-string	 (string-match inferior-R-page	       string)))
+      (if (or help-string page-string)
+          (let* ((string2 (match-string 2 string)))
+            ;;(ess-write-to-dribble-buffer (format " new string='%s'\n" string2))
+            (beginning-of-line)
+            (if (looking-at inferior-ess-primary-prompt)
+                (progn
+                  (end-of-line)
+                  (insert-before-markers string)) ;; emacs 21.0.105 and older
+              (delete-backward-char 1)) ;; emacs 21.0.106 and newer
+            (if help-string ; more frequently
+		(progn
+		  (ess-display-help-on-object
+		   (if (string= string2 "") "help" string2))
+		  (ess-eval-linewise "\n"))
+
+	      ;; else  page-string
+	      (let ((str2-buf (concat string2 ".rt")))
+		(ess-command (concat string2 "\n")
+			     (get-buffer-create str2-buf))
+		(ess-eval-linewise "\n")
+		(switch-to-buffer-other-window str2-buf)
+		(R-transcript-mode))))
+        ;; else:        normal command
+        ;; (inferior-ess-input-sender proc string t)
+        (process-send-string proc (concat string "\n"))
+        (process-put proc 'ready nil)
+        ))))
+
+;; (defun inferior-ess-input-sender (proc string &optional invisibly)
+;;   (ess-eval-linewise (concat string "\n") invisibly nil ess-eval-empty))
 
 
 (ess-if-verbose-write "\n<- debug done")
