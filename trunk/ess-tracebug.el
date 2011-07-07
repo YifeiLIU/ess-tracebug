@@ -5,7 +5,7 @@
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
 ;; Created: Oct 14 14:15:22 2010
-;; Version: 0.2
+;; Version: 0.2 (svn 80)
 ;; URL:
 ;; Keywords: debug, watch, traceback, ESS, R
 ;;
