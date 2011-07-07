@@ -127,7 +127,7 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
     (define-key map "w" 'ess-watch)
     (define-key map "i" 'ess-dbg-goto-input-event-marker)
     (define-key map "I" 'ess-dbg-goto-input-event-marker)
-    (define-key map "d" 'ess-dbg-flag-for-debuging)
+    (define-key map "d" 'ess-dbg-flag-for-debugging)
     (define-key map "u" 'ess-dbg-unflag-for-debugging)
     (define-key map "b" 'ess-bp-set)
     (define-key map "B" 'ess-bp-set-conditional)
@@ -251,9 +251,24 @@ Local in iESS buffers with `ess-traceback' mode enabled.")
   "Overlay to highlight the position of last input in iESS buffer.
 Local in iESS buffers.")
 
-(defvar ess--busy-char 32
-  "Char to indicate the state of busy prompt.")
-(make-variable-buffer-local 'ess--busy-char)
+(defvar ess--busy-count 0
+  "Used to compute the busy indicator")
+(make-variable-buffer-local 'ess--busy-count)
+
+(unless ess--busy-slash
+  (defvar ess--busy-slash '(32 ?\u2014 92 47))
+  (setq ess--busy-slash (mapcar '(lambda (el) (format " %c " el))
+                                ess--busy-slash ))
+  )
+
+(defvar ess--busy-B '("   " " B " "   "))
+(defvar ess--busy-stars '("      " "      " " *    " " **   " " ***  " " **** "))
+(defvar ess--busy-vbars '("      " "      " " |    " " ||   " " |||  " " |||| "))
+
+(defcustom ess-busy-strings ess--busy-slash
+  "List of strings to replace in turn for busy indication.
+The first element of the list is used as an indicator for  process being ready (i.e. not busy)
+Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--busy-vbars'")
 
 (defvar ess--busy-timer nil
   "Timer used for busy process indication")
@@ -263,10 +278,10 @@ Local in iESS buffers.")
   :group 'ess-traceback)
 
 (defcustom inferior-ess-replace-long+ t
-  "If non-nil,  '+ + + + ' containing more than 3 + is replaced by `ess-long+replace'"
+  "If non-nil,  '+ + + + ' containing more than 3 + is replaced by `ess-long+replacement'"
   :group 'ess-traceback)
 
-(defcustom ess-long+replace "+ ... + "
+(defcustom ess-long+replacement "+ ... + "
   "Replacement used for long + prompt."
   :group 'ess-traceback)
 
@@ -312,17 +327,24 @@ Local in iESS buffers.")
       )
     ;; busy timer
     (make-local-variable 'ess--was-busy)
-    (setq mode-line-buffer-identification (list (car (propertized-buffer-identification "%3b"))
-                                                `(:eval (propertize (format " %c   " ess--busy-char) 'face 'mode-line-buffer-id))))
+    (setq mode-line-buffer-identification
+          (list (car (propertized-buffer-identification "%3b"))
+                `(:eval (propertize (nth ess--busy-count ess-busy-strings) 'face 'mode-line-buffer-id))))
     (make-local-variable 'ess--busy-timer)
     (setq ess--busy-timer
-          (run-with-timer 5 .5 (ess--make-busy-timer-function (get-buffer-process (current-buffer)))))
+          (run-with-timer 2 .5 (ess--make-busy-timer-function (get-buffer-process (current-buffer)))))
     (add-hook 'kill-buffer-hook '(lambda () (cancel-timer ess--busy-timer)))
-    ;; advices
-    (ad-activate 'ess-eval-region)
+    ;; redefine
+    (defalias 'orig-inferior-R-input-sender (symbol-function 'inferior-R-input-sender))
+    (defalias 'inferior-R-input-sender (symbol-function 'inferior-R-input-sender2))
+    (defalias 'orig-ess-eval-region (symbol-function 'ess-eval-region))
+    (defalias 'ess-eval-region (symbol-function 'ess-eval-region2))
+    (defalias 'orig-ess-eval-linewise (symbol-function 'ess-eval-linewise))
+    (defalias 'ess-eval-linewise (symbol-function 'ess-eval-linewise2))
+    (defalias 'orig-ess-command (symbol-function 'ess-command))
+    (defalias 'ess-command (symbol-function 'ess-command2))
+    ;; hooks
     (add-hook 'ess-send-input-hook 'move-last-input-on-send-input t t)
-    ;; (ad-activate 'ess-eval-linewise)
-    ;; (ad-activate 'inferior-ess-send-input)
     (setq ess-tracebug-p t)
     )
   )
@@ -331,10 +353,17 @@ Local in iESS buffers.")
   "Stop ess traceback session in the current ess process"
   (with-current-buffer (process-buffer (get-process ess-current-process-name))
     (setq ess-tracebug-p nil)
+    ;; restore original definitions
+    (when (fboundp 'orig-inferior-R-input-sender)
+      (defalias 'inferior-R-input-sender (symbol-function 'orig-inferior-R-input-sender)))
+    (when (fboundp 'orig-ess-eval-region)
+      (defalias 'ess-eval-region (symbol-function 'orig-ess-eval-region)))
+    (when (fboundp 'orig-ess-eval-linewise)
+      (defalias 'ess-eval-linewise (symbol-function 'orig-ess-eval-linewise)))
+    (when (fboundp 'orig-ess-command)
+      (defalias 'ess-command (symbol-function 'orig-ess-command)))
+    (setq comint-process-echoes t) ;; back to kludge
     (remove-hook 'ess-send-input-hook 'move-last-input-on-send-input t)
-    ;; (ad-deactivate 'inferior-ess-send-input)
-    (ad-deactivate 'ess-eval-region)
-    ;; (ad-deactivate 'ess-eval-linewise)
     (if (local-variable-p 'ess-tb-last-input-overlay)
         (delete-overlay ess-tb-last-input-overlay))
     (kill-local-variable 'ess-tb-last-input-overlay)
@@ -510,73 +539,6 @@ This is the value of `next-error-function' in iESS buffers."
 ;;; Complete redefining of  eval-region is needed to avoid messing the debugger.
 ;;; New eval-region  flushes all blank lines and trailing \n's.
 
-(defun ess-process-send-string (string process)
-  (unless process
-    (setq process (get-process ess-current-process-name)))
-  (if (stringp process)
-      (setq process (get-process process)))
-  (process-put sprocess 'ready nil)
-  (setq string (replace-regexp-in-string
-                "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
-  (setq string
-        (replace-regexp-in-string  "^.*\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
-  (if (and (count )))
-  (print string)
-  (process-send-string process (concat string "\n"))
-  )
-
-(defun ess-eval-region (start end toggle &optional message)
-    "Send the current region to the inferior ESS process.
-With prefix argument toggle the meaning of `ess-eval-visibly-p';
-this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
-    (interactive "r\nP")
-    ;;(untabify (point-min) (point-max))
-    ;;(untabify start end); do we really need to save-excursion?
-    (ess-force-buffer-current "Process to load into: ")
-    (message "Sending region to process...")
-
-  (if (ess-ddeclient-p)
-      (ess-eval-region-ddeclient start end 'even-empty)
-    ;; else: "normal", non-DDE behavior:
-    (let ((visibly (if toggle (not ess-eval-visibly-p) ess-eval-visibly-p))
-          (string (buffer-substring-no-properties start end)))
-      (if visibly
-	  (ess-eval-linewise string)
-	(if ess-synchronize-evals
-	    (ess-eval-linewise string
-			       (or message "Eval region"))
-	  ;; else [almost always!]
-	  (let ((sprocess (get-ess-process ess-current-process-name)))
-	    (ess-process-send-string (concat string "\n") sprocess))))))
-
-  (message "Region sent to process")
-  (if (and (fboundp 'deactivate-mark) ess-eval-deactivate-mark)
-      (deactivate-mark))
-  ;; return value
-  (list start end)
-  )
-
-;; this advice is probably not very useful. :TOTHINK:
-;; (defadvice ess-eval-linewise (around move-last-input)
-;;   "Move the `ess-tb-last-input' marker and
-;;   `ess-tb-last-input-overlay' to apropriate positions.'"
-;;   (ess-force-buffer-current "Process to load into: ")
-;;   (let* ((last-input-process (get-process ess-local-process-name))
-;;          (last-input-mark (copy-marker (process-mark last-input-process))))
-;;     ad-do-it
-;;     (with-current-buffer (process-buffer last-input-process)
-;;       (when (local-variable-p 'ess-tb-last-input)
-;;           (setq ess-tb-last-input last-input-mark)
-;;           (goto-char last-input-mark)
-;;           (move-overlay ess-tb-last-input-overlay (point-at-bol) (point))
-;;           )
-;;       )
-;;     )
-;;   )
-
-                                        ;(ad-activate 'ess-eval-linewise)
-                                        ;(ad-unadvise 'ess-eval-linewise)
-
 (defun inferior-ess-move-last-input-overlay ()
   (let ((pbol (point-at-bol))
         (pt (point)) )
@@ -584,48 +546,10 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
     )
   )
 
-(defadvice  ess-eval-region (around move-last-input)
-  "Move the `ess-tb-last-input' marker and
-  `ess-tb-last-input-overlay' to apropriate positions.'"
-  (ess-force-buffer-current "Process to load into: ")
-  (let* ((last-input-process (get-process ess-local-process-name))
-         (last-input-mark (copy-marker (process-mark last-input-process))))
-    ad-do-it
-    (with-current-buffer (process-buffer last-input-process)
-      (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
-        (setq ess-tb-last-input last-input-mark)
-        (goto-char last-input-mark)
-        (inferior-ess-move-last-input-overlay)
-        (comint-goto-process-mark)
-        )
-      (when (and inferior-ess-split-long-prompt
-                 (> (current-column) 2)
-                 (looking-back "> "))
-          (backward-char 2)
-          (insert " \n")
-        )
-      )
-    )
-  )
-
-;;(ad-activate 'ess-eval-region)
-                                        ; (ad-unadvise 'ess-eval-region)
-
 (defun move-last-input-on-send-input ()
     (setq ess-tb-last-input (point))
     (inferior-ess-move-last-input-overlay)
   )
-
-
-;; (defadvice inferior-ess-send-input (after move-last-input)
-;;   "Move the `ess-tb-last-input' marker and
-;;   `ess-tb-last-input-overlay' to apropriate positions.'"
-;;   (move-last-input-on-send-input)
-;;   )
-
-;; ;;ad-activate 'inferior-ess-send-input)
-;; (ad-deactivate 'inferior-ess-send-input)
-
 
 (ess-if-verbose-write "\n<- advising done")
 
@@ -1054,24 +978,14 @@ Kill the *ess.dbg.[R_name]* buffer."
      (let ((pb ,process))
        (when (eq (process-status pb) 'run) ;; only when the process is alive
          (with-current-buffer (process-buffer pb)
-           (setq ess--busy-char
-                 (if (process-get pb 'ready)
-                     (progn
-                       (when ess--was-busy
-                         (force-mode-line-update)
-                         (setq ess--was-busy nil))
-                       32)
-                   (setq ess--was-busy t)
-                   (force-mode-line-update)
-                   (case ess--busy-char
-                     (nil ?\u2014)
-                     (32 ?\u2014) ;space
-                     (47 ?\u2014) ;slash > dash
-                     (?\u2014 92) ;dash > backslash
-                     (92 47); backslash > slash
-                     )
-                   ))
-           )))))
+           (if (process-get pb 'ready)
+               (when (> ess--busy-count 0)
+                 (setq ess--busy-count 0)
+                 (force-mode-line-update)
+                 )
+             (setq ess--busy-count (1+ (mod  ess--busy-count  (1- (length ess-busy-strings)))))
+             (force-mode-line-update)
+           ))))))
 
 ;; (ess--make-busy-prompt-function (get-process "R"))
 
@@ -1119,7 +1033,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
     (if inferior-ess-replace-long+
-        (setq string (replace-regexp-in-string "\\(\\+ \\)\\{3\\}\\(\\+ \\)+" ess-long+replace string))
+        (setq string (replace-regexp-in-string "\\(\\+ \\)\\{3\\}\\(\\+ \\)+" ess-long+replacement string))
       )
     ;; COMINT
     (comint-output-filter proc string)
@@ -2427,11 +2341,11 @@ local({
   "If non-nil use ido completion for debug/undebug functionality.
 `ido-mode' is part of emacs. If you are using different
 completions mechanisms such as icicle you should set this to nil.
-If you are not using ido `ess-dbg-flag-for-debuging' will
+If you are not using ido `ess-dbg-flag-for-debugging' will
 activate the ido mode for the period of completion resulting in a
 slight overhead of starting the global mode.")
 
-(defun ess-dbg-flag-for-debuging ()
+(defun ess-dbg-flag-for-debugging ()
   "Set the debugging flag on a function.
 Ask the user for a function and if it turns to be generic, ask
 for signature and trace it with browser tracer."
@@ -2534,6 +2448,59 @@ for signature and trace it with browser tracer."
       (message out-message)
       )))
 
+
+;;;_ * Kludges and Fixes
+
+;;; delete-char and delete-backward-car do not delete whole intangible text
+(defadvice delete-char (around delete-backward-char-intangible activate)
+  "When about to delete a char that's intangible, delete the whole intangible region
+Only do this when #chars is 1"
+  (if (and (= (ad-get-arg 0) 1)
+           (get-text-property (point) 'intangible))
+      (progn
+       (kill-region (point) (next-single-property-change (point) 'intangible))
+       (indent-for-tab-command)
+       )
+    ad-do-it
+    ))
+
+(defadvice delete-backward-char (around delete-backward-char-intangible activate)
+  "When about to delete a char that's intangible, delete the whole intangible region
+Only do this when called interactively and  #chars is 1"
+  (if (and (= (ad-get-arg 0) 1)
+           (> (point) (point-min))
+           (get-text-property (1- (point)) 'intangible))
+      (progn
+        (kill-region (previous-single-property-change (point) 'intangible) (point))
+        (indent-for-tab-command)
+        )
+    ad-do-it
+    ))
+
+;;; previous-line gets stuck if next char is intangible
+(defadvice previous-line (around solves-intangible-text-kludge activate)
+  "When about to move to previous line when next char is
+intanbible, step char backward first"
+  (if (and (or (null (ad-get-arg 0))
+               (= (ad-get-arg 0) 1))
+           (get-text-property (point) 'intangible))
+      (backward-char 1)
+    )
+  ad-do-it
+  )
+
+;;TODO
+;; (defun ess-bp-remove-all-all-buffers nil
+;;   "Delete all visible breakpoints in all open buffers."
+;;   (interactive)
+;;   (let ((buffers (buffer-list)))
+;;     (save-excursion
+;;       (while buffers
+;;         (set-buffer (car buffers))
+;;         (ess-bp-remove-all-current-buffer)
+;;         (setq buffers (cdr buffers))))))
+
+
 ;;;_ * ESS inf imperfections
 
 (defun ess-wait-for-process (proc &optional sleep force-redisplay timeout)
@@ -2556,16 +2523,16 @@ for signature and trace it with browser tracer."
 (defun ordinary-insertion-filter2 (proc string)
   "improved version of ess filter"
   ;; (with-current-buffer (process-buffer proc)
-    (let (moving)
-      (process-put proc 'ready (string-match "> +\\'" string))
-      (setq moving (= (point) (process-mark proc)))
-      (save-excursion
-        ;; Insert the text, moving the process-marker.
-        (goto-char (process-mark proc))
-        (insert string)
-        (set-marker (process-mark proc) (point)))
-      (if moving (goto-char (process-mark proc))))
-    )
+  (let (moving)
+    (process-put proc 'ready (string-match "> +\\'" string))
+    (setq moving (= (point) (process-mark proc)))
+    (save-excursion
+      ;; Insert the text, moving the process-marker.
+      (goto-char (process-mark proc))
+      (insert string)
+      (set-marker (process-mark proc) (point)))
+    (if moving (goto-char (process-mark proc))))
+  )
 
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
   "Improved version of `ess-command'. Intended to be used when ess-tracebug is on"
@@ -2586,7 +2553,6 @@ for signature and trace it with browser tracer."
          )
     (if (ess-ddeclient-p)
         (ess-command-ddeclient com buf sleep)
-
       ;; else: "normal", non-DDE behavior:
       (save-excursion
         ;; (set-buffer sbuffer)
@@ -2678,60 +2644,7 @@ the words does contain ',!,' substring :)
       words)
     ))
 
-
-;;;_ * Kludges and Fixes
-
-;;; delete-char and delete-backward-car do not delete whole intangible text
-(defadvice delete-char (around delete-backward-char-intangible activate)
-  "When about to delete a char that's intangible, delete the whole intangible region
-Only do this when #chars is 1"
-  (if (and (= (ad-get-arg 0) 1)
-           (get-text-property (point) 'intangible))
-      (progn
-       (kill-region (point) (next-single-property-change (point) 'intangible))
-       (indent-for-tab-command)
-       )
-    ad-do-it
-    ))
-
-(defadvice delete-backward-char (around delete-backward-char-intangible activate)
-  "When about to delete a char that's intangible, delete the whole intangible region
-Only do this when called interactively and  #chars is 1"
-  (if (and (= (ad-get-arg 0) 1)
-           (> (point) (point-min))
-           (get-text-property (1- (point)) 'intangible))
-      (progn
-        (kill-region (previous-single-property-change (point) 'intangible) (point))
-        (indent-for-tab-command)
-        )
-    ad-do-it
-    ))
-
-;;; previous-line gets stuck if next char is intangible
-(defadvice previous-line (around solves-intangible-text-kludge activate)
-  "When about to move to previous line when next char is
-intanbible, step char backward first"
-  (if (and (or (null (ad-get-arg 0))
-               (= (ad-get-arg 0) 1))
-           (get-text-property (point) 'intangible))
-      (backward-char 1)
-    )
-  ad-do-it
-  )
-
-;;TODO
-;; (defun ess-bp-remove-all-all-buffers nil
-;;   "Delete all visible breakpoints in all open buffers."
-;;   (interactive)
-;;   (let ((buffers (buffer-list)))
-;;     (save-excursion
-;;       (while buffers
-;;         (set-buffer (car buffers))
-;;         (ess-bp-remove-all-current-buffer)
-;;         (setq buffers (cdr buffers))))))
-
-
-(defun inferior-R-input-sender (proc string)
+(defun inferior-R-input-sender2 (proc string)
   ;; next line only for debugging: this S_L_O_W_S D_O_W_N [here AND below]
   ;;(ess-write-to-dribble-buffer (format "(inf..-R-..): string='%s'; " string))
   ;; rmh: 2002-01-12 catch page() in R
@@ -2769,6 +2682,207 @@ intanbible, step char backward first"
 
 ;; (defun inferior-ess-input-sender (proc string &optional invisibly)
 ;;   (ess-eval-linewise (concat string "\n") invisibly nil ess-eval-empty))
+
+
+(defun ess-process-send-string (string process)
+  (unless process
+    (setq process (get-process ess-current-process-name)))
+  (if (stringp process)
+      (setq process (get-process process)))
+  (process-put sprocess 'ready nil)
+  (setq string (replace-regexp-in-string
+                "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
+  (setq string
+        (replace-regexp-in-string  "^.*\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
+  (process-send-string process (concat string "\n"))
+  )
+
+
+;; (defadvice  ess-eval-region (around move-last-input)
+;;   "Move the `ess-tb-last-input' marker and
+;;   `ess-tb-last-input-overlay' to apropriate positions.'"
+;;   (ess-force-buffer-current "Process to load into: ")
+;;   (let* ((last-input-process (get-process ess-local-process-name))
+;;          (last-input-mark (copy-marker (process-mark last-input-process))))
+;;     ad-do-it
+;;     (with-current-buffer (process-buffer last-input-process)
+;;       (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
+;;         (setq ess-tb-last-input last-input-mark)
+;;         (goto-char last-input-mark)
+;;         (inferior-ess-move-last-input-overlay)
+;;         (comint-goto-process-mark)
+;;         )
+;;       (when (and inferior-ess-split-long-prompt
+;;                  (> (current-column) 2)
+;;                  (looking-back "> "))
+;;         (backward-char 2)
+;;         (insert " \n")
+;;         )
+;;       )
+;;     )
+;;   )
+;; (ad-unadvise 'ess-eval-region )
+
+
+(defun ess-eval-region2 (start end toggle &optional message)
+  "Send the current region to the inferior ESS process.
+With prefix argument toggle the meaning of `ess-eval-visibly-p';
+this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
+  (interactive "r\nP")
+  ;;(untabify (point-min) (point-max))
+  ;;(untabify start end); do we really need to save-excursion?
+  (ess-force-buffer-current "Process to load into: ")
+  (message "Sending region to process...")
+
+  (if (ess-ddeclient-p)
+      (ess-eval-region-ddeclient start end 'even-empty)
+    ;; else: "normal", non-DDE behavior:
+    (let* ((visibly (if toggle (not ess-eval-visibly-p) ess-eval-visibly-p))
+           (string (buffer-substring-no-properties start end))
+           (sprocess (get-process ess-current-process-name))
+           (last-input-mark (copy-marker (process-mark sprocess))))
+      (if visibly
+	  (ess-eval-linewise string)
+	(if ess-synchronize-evals
+	    (ess-eval-linewise string (or message "Eval region"))
+	  ;; else [almost always!]
+          (ess-process-send-string string sprocess)))
+      (with-current-buffer (process-buffer sprocess)
+        (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
+          (setq ess-tb-last-input last-input-mark)
+          (goto-char last-input-mark)
+          (inferior-ess-move-last-input-overlay)
+          (comint-goto-process-mark)
+          )
+        (when (and inferior-ess-split-long-prompt
+                   (> (current-column) 2)
+                   (looking-back "> "))
+          (backward-char 2)
+          (insert " \n")
+          ))
+      ))
+
+  (message "Region sent to process")
+  (if (and (fboundp 'deactivate-mark) ess-eval-deactivate-mark)
+      (deactivate-mark))
+  ;; return value
+  (list start end)
+  )
+
+
+(defun ess-eval-linewise2 (text-withtabs &optional
+					invisibly eob even-empty
+					wait-last-prompt sleep-sec timeout-ms)
+  ;; RDB 28/8/92 added optional arg eob
+  ;; AJR 971022: text-withtabs was text.
+  ;; MM 2006-08-23: added 'timeout-ms' -- but the effect seems "nil"
+  ;; MM 2007-01-05: added 'sleep-sec'
+  "Evaluate TEXT-WITHTABS in the ESS process buffer as if typed in w/o tabs.
+Waits for prompt after each line of input, so won't break on large texts.
+
+If optional second arg INVISIBLY is non-nil, don't echo commands.  If it
+is a string, just include that string.	If optional third arg
+EOB is non-nil go to end of ESS process buffer after evaluation.  If
+optional 4th arg EVEN-EMPTY is non-nil, also send empty text (e.g. an
+empty line).  If 5th arg WAIT-LAST-PROMPT is non-nil, also wait for
+the prompt after the last line;  if 6th arg SLEEP-SEC is a number, ESS
+will call '(\\[sleep-for] SLEEP-SEC) at the end of this function.  If the
+7th arg TIMEOUT-MS is set to number, it will be used instead of the
+default 100 ms and be passed to \\[accept-process-output]."
+  ;; but the effect is unclear
+  (if (ess-ddeclient-p)
+      (ess-eval-linewise-ddeclient text-withtabs
+				   invisibly eob even-empty
+				   (if wait-last-prompt
+				       ess-eval-ddeclient-sleep))
+
+    ;; else: "normal", non-DDE behavior:
+
+    ;; Use this to evaluate some code, but don't wait for output.
+    (let* ((deactivate-mark); keep local {do *not* deactivate wrongly}
+	   (cbuffer (current-buffer))
+	   (sprocess (get-ess-process ess-current-process-name))
+	   (sbuffer (process-buffer sprocess))
+	   (text (ess-replace-in-string text-withtabs "\t" " "))
+	   start-of-output
+	   com pos txt-gt-0)
+
+      (unless (numberp timeout-ms)
+	(setq timeout-ms 100));; << make '100' into a custom-variable
+
+      ;;(message "'ess-eval-linewise: sbuffer = %s" sbuffer)
+      (set-buffer sbuffer)
+
+      ;; the following is required to make sure things work!
+      (when (string= ess-language "STA")
+	(if ess-sta-delimiter-friendly;; RAS: mindless replacement of semi-colons
+	    (setq text (ess-replace-in-string text ";" "\n")))
+	(setq invisibly t))
+      ;; dbg:
+      ;; dbg(ess-write-to-dribble-buffer
+      ;; dbg (format "(eval-visibly 1): lang %s (invis=%s, eob=%s, even-empty=%s)\n"
+      ;; dbg	 ess-language invisibly eob even-empty))
+
+      (goto-char (marker-position (process-mark sprocess)))
+      (if (stringp invisibly)
+	  (insert-before-markers (concat "*** " invisibly " ***\n")))
+      ;; dbg:
+      ;; dbg (ess-write-to-dribble-buffer
+      ;; dbg  (format "(eval-visibly 2): text[%d]= '%s'\n" (length text) text))
+      (while (or (setq txt-gt-0 (> (length text) 0))
+		 even-empty)
+	(if even-empty (setq even-empty nil))
+	(if txt-gt-0
+	    (progn
+	      (setq pos (string-match "\n\\|$" text))
+	      (setq com (concat (substring text 0 pos) "\n"))
+	      (setq text (substring text (min (length text) (1+ pos)))))
+	  ;; else 0-length text
+	  (setq com "\n")
+	  )
+	(goto-char (marker-position (process-mark sprocess)))
+	(if (not invisibly)
+	    ;; Terrible kludge -- need to insert after all markers *except*`
+	    ;; the process mark
+	    (let ((dokludge (eq (point)
+				(marker-position (process-mark sprocess)))))
+              (insert com)
+	      (if dokludge (set-marker (process-mark sprocess) (point)))))
+	(setq start-of-output (marker-position (process-mark sprocess)))
+        ;; A kludge to prevent the delay between insert and process output
+        ;; affecting the display.        A case for a comint-send-input-hook?
+        ;; (save-excursion
+        ;;   ;; comint-postoutput-scroll-to-bottom can change
+        ;;   ;; current-buffer. Argh.
+        ;;   (let ((functions comint-output-filter-functions))
+        ;;     (while functions
+        ;;       (funcall (car functions) com)
+        ;;       (setq functions (cdr functions)))))
+        (process-put sprocess 'ready nil)
+	(process-send-string sprocess com)
+	;; wait for the prompt - after the last line of input only if wait-last:
+	(if (or wait-last-prompt
+		(> (length text) 0))
+            (while (progn
+                     (accept-process-output sprocess 0 timeout-ms)
+                     (goto-char (marker-position (process-mark sprocess)))
+                     (beginning-of-line)
+                     (if (< (point) start-of-output)
+                         (goto-char start-of-output))
+                     (not (looking-at inferior-ess-prompt))))))
+
+      (goto-char (marker-position (process-mark sprocess)))
+      (if eob
+	  (progn
+	    (ess-show-buffer (buffer-name sbuffer) nil)
+	    ;; Once SBUFFER is visible, we can then move the point in that
+	    ;; window to the end of the buffer.
+	    (set-window-point (get-buffer-window sbuffer t)
+			      (with-current-buffer sbuffer (point-max))))
+	(set-buffer cbuffer))
+      (if (numberp sleep-sec)
+	  (sleep-for sleep-sec))))); in addition to timeout-ms
+
 
 
 (ess-if-verbose-write "\n<- debug done")
