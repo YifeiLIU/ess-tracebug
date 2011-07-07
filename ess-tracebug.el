@@ -255,7 +255,7 @@ Local in iESS buffers.")
   "Used to compute the busy indicator")
 (make-variable-buffer-local 'ess--busy-count)
 
-(unless ess--busy-slash
+(unless (boundp 'ess--busy-slash)
   (defvar ess--busy-slash '(32 ?\u2014 92 47))
   (setq ess--busy-slash (mapcar '(lambda (el) (format " %c " el))
                                 ess--busy-slash ))
@@ -1602,7 +1602,7 @@ to the current position, nil if not found. "
   (interactive)
   (let* ((pos (ess-bp-get-bp-position-nearby))
          (same-line (if pos
-                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
+                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
          (types ess-bp-type-spec-alist)
          (ev last-command-event)
          (com-char  (event-basic-type ev))
