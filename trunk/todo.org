@@ -12,5 +12,11 @@
   CLOSED: [2010-11-11 Thu 13:54]
 * TODO popup the R buffer on  _errors_ and/or on _debug at_
 * TODO make ess-eval-region2 and remove advising
-* TODO make running prompt and remove useless Finished evaluation message as
+* DONE make runoning prompt and remove useless Finished evaluation message as
+  CLOSED: [2011-07-21 Thu 17:31]
+  :LOGBOOK:
+  - State "DONE"       from "TODO"       [2011-07-21 Thu 17:31]
+  :END:
   suggested here https://stat.ethz.ch/pipermail/ess-help/2011-May/006893.html
+
+* TODO make a lazy installer as here: https://github.com/dimitri/el-get/  :)
