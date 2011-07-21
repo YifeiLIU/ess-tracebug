@@ -2583,6 +2583,7 @@ intanbible, step char backward first"
                     (sleep-for 0.020); 0.1 is noticeable!
                   ;; else: default
                   ;; (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
+                  (ess-if-verbose-write " .. waiting for ess process {ess-command2} .. ")
                   (ess-wait-for-process sprocess    ;; default timeout 30 seconds!
                                         (and do-sleep (* 0.4 sleep))) ;; not visible here! error during redisplay in *R* buffer
                   )
