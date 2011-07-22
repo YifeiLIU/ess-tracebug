@@ -5,7 +5,7 @@
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
 ;; Created: Oct 14 14:15:22 2010
-;; Version: 0.2 (svn 80)
+;; Version: 0.2.5
 ;; URL: http://code.google.com/p/ess-tracebug/
 ;; Keywords: debug, watch, traceback, ESS, R
 ;;
@@ -90,7 +90,7 @@
   (require 'cl))
 
 
-(defvar ess-tracebug-version 0.2)
+(defvar ess-tracebug-version "0.2.5")
 
 (defgroup ess-tracebug nil
   "Error navigation and debugging for ESS.
@@ -159,6 +159,21 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
  in ESS and iESS mode."
   )
 
+(defun ess-tracebug--propertize (dummy bitmap face &optional string )
+  "If window-system propertize DUMMY with fringe BITMAP and FACE,
+else propertize  line-prefix and margin  with STRING and  FACE"
+  (unless string
+    (setq string dummy))
+  (if window-system
+      (propertize dummy 'display (list 'left-fringe bitmap face))
+    (propertize dummy
+                'display (list '(margin left-margin)
+                               (propertize string
+                                           'font-lock-face face
+                                           'face face))
+                )
+    ))
+
 
 (defun ess-tracebug (&optional arg)
   "Toggle ess-tracebug mode.
@@ -205,42 +220,48 @@ activated/deactivate separately with `ess-traceback' and
   :prefix "ess-tb-"
   )
 
-
 (defface ess-tb-last-input-face
   '((((class grayscale)
       (background light)) (:background "DimGray"))
     (((class grayscale)
       (background dark))  (:background "LightGray"))
-    (((class color)
-      (background light)) (:overline "medium blue" ))
-    (((class color)
-      (background dark))  (:overline "deep sky blue" ))
+    (((class color) (background light) (min-colors 88))
+     (:overline "medium blue" ))
+    (((class color) (background dark) (min-colors 88))
+     (:overline "deep sky blue" ))
+    (((background light))  (:weight bold))
+    (((background dark)) (:weight bold))
     )
   "Face to highlight currently debugged line."
   :group 'ess-traceback )
 
 (defface ess-tb-last-input-fringe-face
-  '((((background light)) (:foreground "medium blue" :overline "medium blue"))
-    (((background dark))  (:foreground "deep sky blue" :overline "deep sky blue"))
+  '((((background light) (min-colors 88)) (:foreground "medium blue" :overline "medium blue"))
+    (((background dark) (min-colors 88))  (:foreground "deep sky blue" :overline "deep sky blue"))
+    (((background light) (min-colors 8))  (:foreground "blue"))
+    (((background dark) (min-colors 8))  (:foreground "syan"))
     )
   "Face for fringe bitmap for last-input position."
   :group 'ess-traceback)
 
-(define-fringe-bitmap 'last-input-arrow
-  [#b00011111
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b00010000
-   #b11010111
-   #b01111100
-   #b00111000
-   #b00010000] nil nil 'top)
+(if (fboundp 'define-fringe-bitmap)
+    (define-fringe-bitmap 'last-input-arrow
+      [#b00011111
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b00010000
+       #b11010111
+       #b01111100
+       #b00111000
+       #b00010000] nil nil 'top)
+  )
+
 
 (defvar ess-tb-last-input (make-marker)
   "Marker pointing to the last user input position in iESS buffer.
@@ -296,13 +317,14 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
   "Create an overlay to indicate the last input position."
   (let   ((ove (make-overlay beg end)))
     (overlay-put ove 'before-string
-                 (propertize "*last-input-start*"
-                             'display (list 'left-fringe 'last-input-arrow 'ess-tb-last-input-fringe-face)))
+                 (ess-tracebug--propertize "!"  'last-input-arrow 'ess-tb-last-input-fringe-face))
     (overlay-put ove 'face  'ess-tb-last-input-face)
     (overlay-put ove 'evaporate t)
     ove
     )
   )
+
+;; (ess-tb-make-last-input-overlay (point-at-bol) (point-at-eol))
 
 (defun ess-tb-start ()
   "Start traceback session "
@@ -320,6 +342,7 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
     (make-local-variable 'ess-tb-last-input-overlay)
     (make-local-variable 'compilation-search-path)
     (setq compilation-search-path ess-dbg-search-path)
+    (ess-tracebug--set-left-margin)
     (save-excursion
       (goto-char comint-last-input-start)
       (setq ess-tb-last-input (point))
@@ -540,6 +563,7 @@ This is the value of `next-error-function' in iESS buffers."
 ;;; New eval-region  flushes all blank lines and trailing \n's.
 
 (defun inferior-ess-move-last-input-overlay ()
+  "Move the overlay to the point."
   (let ((pbol (point-at-bol))
         (pt (point)) )
     (move-overlay ess-tb-last-input-overlay pbol (max (- pt 2) (+ pbol 2)))
@@ -547,8 +571,8 @@ This is the value of `next-error-function' in iESS buffers."
   )
 
 (defun move-last-input-on-send-input ()
-    (setq ess-tb-last-input (point))
-    (inferior-ess-move-last-input-overlay)
+  (setq ess-tb-last-input (point))
+  (inferior-ess-move-last-input-overlay)
   )
 
 (ess-if-verbose-write "\n<- advising done")
@@ -619,7 +643,12 @@ Elements should be directory names, not file names of directories.
 (defvar ess-dbg-current-debug-position (make-marker)
   "Marker to the current debugged line.
  It always point to the beginning of the currently debugged line
-and is used by overlay-arrow.")
+and is used by overlay-arrow.
+In no-windowed emacs an `overlay-arrow' is displayed at this position.")
+
+(unless  window-system
+  (add-to-list 'overlay-arrow-variable-list 'ess-dbg-current-debug-position)
+  )
 
 (defface ess-dbg-current-debug-line-face
   '((((class grayscale)
@@ -627,9 +656,11 @@ and is used by overlay-arrow.")
     (((class grayscale)
       (background dark))  (:background "LightGray"))
     (((class color)
-      (background light)) (:background "tan"))
+      (background light) (min-colors 88)) (:background "tan"))
     (((class color)
-      (background dark))  (:background "gray20"))
+      (background dark) (min-colors 88))  (:background "gray20"))
+    (((background light) (min-colors 8))  (:weight bold))
+    (((background dark) (min-colors 8))  (:weight bold))
     )
   "Face used to highlight currently debugged line."
   :group 'ess-debug
@@ -642,6 +673,7 @@ and is used by overlay-arrow.")
     (overlay-put overlay 'evaporate t)
     overlay
     )
+  ;; should be global variable!!
   "The overlay for currently debugged line.")
 
 
@@ -655,28 +687,24 @@ and is used by overlay-arrow.")
   :type 'float)
 
 (defface ess-dbg-blink-ref-not-found-face
-  '((((class grayscale)
-      (background light)) (:background "DimGray"))
-    (((class grayscale)
-      (background dark))  (:background "LightGray"))
-    (((class color)
-      (background light)) (:background "IndianRed4"))
-    (((class color)
-      (background dark))  (:background "dark red"))
+  '((((class grayscale) (background light)) (:background "DimGray"))
+    (((class grayscale) (background dark))  (:background "LightGray"))
+    (((class color) (background light) (min-colors 88)) (:background "IndianRed4"))
+    (((class color) (background dark) (min-colors 88))  (:background "dark red"))
+    (((background light) (min-colors 8))  (:foreground "red"))
+    (((background dark) (min-colors 8))  (:foreground "red"))
     )
   "Face used to blink currently debugged line's background
  when the reference file is not found. See also `ess-dbg-ask-for-file'"
   :group 'ess-debug )
 
 (defface ess-dbg-blink-same-ref-face
-  '((((class grayscale)
-      (background light)) (:background "DimGray"))
-    (((class grayscale)
-      (background dark))  (:background "LightGray"))
-    (((class color)
-      (background light)) (:background "steel blue"))
-    (((class color)
-      (background dark))  (:background "midnight blue"))
+  '((((class grayscale) (background light)) (:background "DimGray"))
+    (((class grayscale) (background dark))  (:background "LightGray"))
+    (((class color) (background light) (min-colors 88)) (:background "steel blue"))
+    (((class color) (background dark) (min-colors 88))  (:background "midnight blue"))
+    (((background light) (min-colors 8))  (:foreground "blue"))
+    (((background dark) (min-colors 8))  (:foreground "cyan"))
     )
   "Face used to highlight currently debugged line when new debug
 reference is the same as the preceding one. It is highlighted for
@@ -782,15 +810,15 @@ The list of actions are specified in `ess-dbg-error-action-alist'. "
   )
 
 (defun ess-dbg-activate-overlays ()
-  "Initialize active debug line."
+  "Initialize active debug line overlays."
   (move-overlay ess-dbg-current-debug-overlay (point-at-bol) (1+ (point-at-eol)) (current-buffer))
-  (move-marker ess-dbg-current-debug-position (point-at-bol)) ;; used by overlay-arrow,  should be bol
+  (move-marker ess-dbg-current-debug-position (point-at-bol)) ;; used by overlay-arrow functionality on no-X,  should be bol
   )
 
 (defun ess-dbg-deactivate-overlays ()
-  "Deletes markers and overlays. Overlay arrow stays, indicating the last debug position."
+  "Deletes markers and overlays. Overlay arrow remains to indicate the last debug position."
   (delete-overlay ess-dbg-current-debug-overlay)
-  ;; overlay-arrow stays, to indicate the last debugged position!!
+  (set-marker ess-dbg-current-debug-position nil)
   )
 
 ;;;_ + Work Flow
@@ -985,7 +1013,7 @@ Kill the *ess.dbg.[R_name]* buffer."
                  )
              (setq ess--busy-count (1+ (mod  ess--busy-count  (1- (length ess-busy-strings)))))
              (force-mode-line-update)
-           ))))))
+             ))))))
 
 ;; (ess--make-busy-prompt-function (get-process "R"))
 
@@ -1271,7 +1299,7 @@ given by the reference.  This is the value of
             (goto-char 1)
             (forward-line (1- (cdr loc)))
             )
-          (move-marker ess-dbg-current-debug-position (line-beginning-position))
+          (move-marker ess-dbg-current-debug-position (line-beginning-position)) ; move the overlay-arrow
           (back-to-indentation)
           )
       (if (>= 0 (or n 1))
@@ -1420,37 +1448,37 @@ Equivalent to 'n' at the R prompt."
 ;;;_ + BREAKPOINTS
 
 (defface ess-bp-fringe-inactive-face
-  '((((class color)
-      (background light)) (:foreground "DimGray"))
-    (((class color)
-      (background dark))  (:foreground "LightGray"))
+  '((((class color) (background light) (min-colors 88)) (:foreground "DimGray"))
+    (((class color) (background dark) (min-colors 88))  (:foreground "LightGray"))
+    (((background light) (min-colors 8))  (:foreground "blue"))
+    (((background dark) (min-colors 8))  (:foreground "cyan"))
     )
   "Face used to highlight inactive breakpoints."
   :group 'ess-debug)
 
 (defface ess-bp-fringe-logger-face
-  '((((class color)
-      (background light)) (:foreground "dark red"))
-    (((class color)
-      (background dark))  (:foreground "tomato1"))
+  '((((class color) (background light) (min-colors 88)) (:foreground "dark red"))
+    (((class color) (background dark) (min-colors 88))  (:foreground "tomato1"))
+    (((background light) (min-colors 8))  (:foreground "blue"))
+    (((background dark) (min-colors 8))  (:foreground "cyan"))
     )
   "Face used to highlight loggers."
   :group 'ess-debug)
 
 (defface ess-bp-fringe-browser-face
-  '((((class color)
-      (background light)) (:foreground "medium blue"))
-    (((class color)
-      (background dark))  (:foreground "deep sky blue"))
+  '((((class color) (background light) (min-colors 88)) (:foreground "medium blue"))
+    (((class color) (background dark) (min-colors 88))  (:foreground "deep sky blue"))
+    (((background light) (min-colors 8))  (:foreground "blue"))
+    (((background dark) (min-colors 8))  (:foreground "cyan"))
     )
   "Face used to highlight 'browser' breakpoints."
   :group 'ess-debug)
 
 (defface ess-bp-fringe-recover-face
-  '((((class color)
-      (background light)) (:foreground "dark magenta"))
-    (((class color)
-      (background dark))  (:foreground "magenta"))
+  '((((class color) (background light) (min-colors 88)) (:foreground "dark magenta"))
+    (((class color) (background dark) (min-colors 88))  (:foreground "magenta"))
+    (((background light) (min-colors 8))  (:foreground "magenta"))
+    (((background dark) (min-colors 8))  (:foreground "magenta"))
     )
   "Face used to highlight 'recover' breakpoints fringe."
   :group 'ess-debug)
@@ -1540,13 +1568,14 @@ List format is identical to that of `ess-bp-type-spec-alist'."
                                  'bp-substring 'command
                                  'display displ-string
                                  ))
-    (setq dummy-string (propertize dummy-string
-                                   'ess-bp t
-                                   'intangible 'ess-bp
-                                   'bp-type type
-                                   'bp-substring 'dummy
-                                   'display (list 'left-fringe fringe-bitmap fringe-face)
-                                   ))
+    (setq dummy-string (propertize
+                        (ess-tracebug--propertize dummy-string fringe-bitmap fringe-face "*")
+                        'ess-bp t
+                        'intangible 'ess-bp
+                        'bp-type type
+                        'bp-substring 'dummy
+                        ))
+    (ess-tracebug--set-left-margin)
     (back-to-indentation)
     (setq insertion-pos (point) )
     (insert (concat   dummy-string bp-command))
@@ -1603,11 +1632,11 @@ to the current position, nil if not found. "
   (let* ((pos (ess-bp-get-bp-position-nearby))
          (same-line (if pos
                         (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
-         (types ess-bp-type-spec-alist)
-         (ev last-command-event)
-         (com-char  (event-basic-type ev))
-         bp-type
-         )
+                        (types ess-bp-type-spec-alist)
+                        (ev last-command-event)
+                        (com-char  (event-basic-type ev))
+                        bp-type
+                        )
     (when same-line
       ;; set bp-type to next type in types
       (setq bp-type (get-text-property (car pos) 'bp-type))
@@ -1647,7 +1676,7 @@ to the current position, nil if not found. "
   (let ((pos (ess-bp-get-bp-position-nearby))
         (init-pos (make-marker)))
     (if (null pos)
-        (if (called-interactively-p 'any) (message "No breakpoint nearby"))
+        (if (called-interactively-p) (message "No breakpoints nearby"))
       (set-marker init-pos (1+ (point)))
       (goto-char (car pos))
       (delete-region (car pos) (cdr pos))
@@ -1818,8 +1847,17 @@ environment(.ess_log_eval) <- .GlobalEnv
   ;; assumes that every expression is a structure of length 1 as returned by parse.
   ".ess_watch_eval()\n")
 
-(define-fringe-bitmap 'current-watch-bar
-  [#b00001100] nil nil '(top t))
+(if (fboundp 'define-fringe-bitmap) ;;not clear to me why is this not bound in SSH session? - :todo check
+    (define-fringe-bitmap 'current-watch-bar
+      [#b00001100] nil nil '(top t)))
+
+(defun ess-tracebug--set-left-margin ()
+  "Set the margin on non-X displays"
+  (unless window-system
+    (when (= left-margin-width 0)
+      (setq left-margin-width 1)
+      (set-window-buffer (selected-window) (current-buffer))
+      )))
 
 (defun ess-watch-mode ()
   "Major mode for output from `ess-rdired'.
@@ -1829,9 +1867,10 @@ can then examine these objects, plot them, and so on.
 \\{ess-rdired-mode-map}"
   (let ((cur-block (max 1 (ess-watch-block-at-point)))
         (dummy-string
-         (propertize "*df*" 'display '(left-fringe current-watch-bar font-lock-keyword-face)))
+         (ess-tracebug--propertize "|" 'current-watch-bar 'font-lock-keyword-face))
         )
-    (kill-all-local-variables )
+    (kill-all-local-variables)
+    (ess-tracebug--set-left-margin)
     (make-local-variable 'revert-buffer-function)
     (setq revert-buffer-function 'ess-watch-revert-buffer)
     (use-local-map ess-watch-mode-map)
@@ -1899,13 +1938,11 @@ for more information."
     ;; (((class grayscale)
     ;;   (background light)) (:background "DimGray"))
     ;; (((class grayscale)
-    ;;   (background dark))  (:background "LightGray"))
-    ;; (((class color)
-    ;;   (background light)) (:background "tan"))
-    (((class color)
-      (background dark))  (:background "gray10"))
+    ;;   (background dark) (min-colors 88))  (:background "LightGray"))
+    (((class color) (background light)) (min-colors 88) (:background "tan"))
+    (((class color) (background dark) (min-colors 88))  (:background "gray10"))
     )
-  "Face used to highlight currently debugged line."
+  "Face used to highlight current watch block."
   :group 'ess-debug
   )
 
@@ -2838,6 +2875,10 @@ default 100 ms and be passed to \\[accept-process-output]."
 	  (setq com "\n")
 	  )
 	(goto-char (marker-position (process-mark sprocess)))
+        (when (local-variable-p 'ess-tb-last-input) ;; TB might not be active in all processes
+          (setq ess-tb-last-input (point))
+          (inferior-ess-move-last-input-overlay)
+          )
 	(if (not invisibly)
 	    ;; Terrible kludge -- need to insert after all markers *except*`
 	    ;; the process mark
