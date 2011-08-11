@@ -333,6 +333,7 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
         (error "Can not activate the debuger for %s dialect" ess-dialect)
       )
     (setq comint-process-echoes nil) ;; kludge in R code :todo report bug
+    (setq inferior-R-2-input-help "^ *\\(\\?\\{1,2\\}\\) *['\"]?\\([^,=)'\"]*\\)['\"]?") ;; ?? bug
     (make-local-variable 'compilation-error-regexp-alist)
     (setq compilation-error-regexp-alist ess-R-tb-regexp-alist)
     (compilation-setup t)
@@ -399,6 +400,7 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
       (defalias 'ess-command (symbol-function 'orig-ess-command))
       (fmakunbound 'orig-ess-command))
     (setq comint-process-echoes t) ;; back to kludge
+    (setq inferior-R-2-input-help "^ *\\? *\\(['\"]?\\)\\([^,=)'\"]*\\)\\1") ;;   original: ?? bug
     (remove-hook 'ess-send-input-hook 'move-last-input-on-send-input t)
     (if (local-variable-p 'ess-tb-last-input-overlay)
         (delete-overlay ess-tb-last-input-overlay))
@@ -2695,16 +2697,15 @@ the words does contain ',!,' substring :)
       words)
     ))
 
+
 (defun inferior-R-input-sender2 (proc string)
-  ;; next line only for debugging: this S_L_O_W_S D_O_W_N [here AND below]
-  ;;(ess-write-to-dribble-buffer (format "(inf..-R-..): string='%s'; " string))
-  ;; rmh: 2002-01-12 catch page() in R
   (save-current-buffer
     (let ((help-string (or (string-match inferior-R-1-input-help string)
                            (string-match inferior-R-2-input-help string)))
           (page-string	 (string-match inferior-R-page	       string)))
       (if (or help-string page-string)
-          (let* ((string2 (match-string 2 string)))
+          (let ((string1 (match-string 1 string))
+                (string2 (match-string 2 string)))
             ;;(ess-write-to-dribble-buffer (format " new string='%s'\n" string2))
             (beginning-of-line)
             (if (looking-at inferior-ess-primary-prompt)
@@ -2713,10 +2714,12 @@ the words does contain ',!,' substring :)
                   (insert-before-markers string)) ;; emacs 21.0.105 and older
               (delete-backward-char 1)) ;; emacs 21.0.106 and newer
             (if help-string ; more frequently
-		(progn
-		  (ess-display-help-on-object
-		   (if (string= string2 "") "help" string2))
-		  (ess-eval-linewise "\n"))
+                (let ((inferior-ess-help-command
+                       (if (string= string1 "?") inferior-ess-help-command "help.search(\"%s\")\n")))
+                  (progn
+                    (ess-display-help-on-object
+                     (if (string= string2 "") "help" string2))
+                    (ess-eval-linewise "\n")))
 
 	      ;; else  page-string
 	      (let ((str2-buf (concat string2 ".rt")))
