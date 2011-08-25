@@ -2560,16 +2560,22 @@ intanbible, step char backward first"
   (if sleep (sleep-for sleep)); we sleep here, *and* wait below
   (unless timeout
     (setq timeout 30))
-  (accept-process-output proc .5)
-  (let ((i .5))
+  (let ((i 1)
+        (elapsed 0.0))
+    (accept-process-output proc 0.01) ;; enought for most of the short commands on my machine
     (while (and (not (process-get proc 'ready))
-                (<= i timeout))
-      ;; (message (format "wait:%s" (process-get proc 'ready)))
-      (accept-process-output proc .5)
+                (< elapsed timeout))
+      (sleep-for (* .1 i)) ; if passed to accept-process-output
+                                        ; does not work in emacs 23.2.1, very elusive bug, most likely on long outputs accept-process-output returns before teh timeout if output is receive
+      (setq elapsed (* (/ (+ i 1) 2.0) .1 i))
+      (setq i (1+ i))
+      (accept-process-output proc 0)
+      ;; (ess-if-verbose-write (format "\n -- timeout --  %s - %s" i elapsed))
       (if force-redisplay (redisplay t))
-      (setq i (+ 0.5 i))
-      (if (> i timeout)
-          (ess-if-verbose-write (format "\nWaited for %s seconds. Process is bussy or waits for user input." timeout)))
+      (when (>= elapsed timeout)
+        (ess-if-verbose-write (format "\nWaited for %s seconds. Process is bussy or waits for the user's input {ess-wait-for-process}." elapsed))
+        ;; (process-put proc 'ready t) ;; unlikely to end here; :tothink
+        )
       )))
 
 (defun ordinary-insertion-filter2 (proc string)
@@ -2586,6 +2592,7 @@ intanbible, step char backward first"
     (if moving (goto-char (process-mark proc))))
   )
 
+;; (setq ess-verbose t)
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
   "Improved version of `ess-command'. Intended to be used when ess-tracebug is on"
   ;; the ddeclient-p checks needs to use the local-process-name
@@ -2636,8 +2643,7 @@ intanbible, step char backward first"
                   ;; else: default
                   ;; (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
                   (ess-if-verbose-write " .. waiting for ess process {ess-command2} .. ")
-                  (ess-wait-for-process sprocess    ;; default timeout 30 seconds!
-                                        (and do-sleep (* 0.4 sleep))) ;; not visible here! error during redisplay in *R* buffer
+                  (ess-wait-for-process sprocess )   ;; default timeout 30 seconds!
                   )
                 ;; (message "command:%s" (process-get sprocess 'ready))
                 (delete-region (point-at-bol) (point-max))
