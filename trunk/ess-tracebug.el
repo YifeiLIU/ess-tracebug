@@ -11,22 +11,22 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+
 ;; This file is *NOT* part of GNU Emacs.
 ;;
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
-;; published by the Free Software Foundation; either version 3, or
-;; (at your option) any later version.
+;; published by the Free Software Foundation; either version 3, any later version.
 ;;
-;; This program is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-;; General Public License for more details.
+;; This program is distributed in the hope that it will be useful, but WITHOUT
+;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+;; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+;; details.
 ;;
-;; You should have received a copy of the GNU General Public License
-;; along with this program; see the file COPYING.  If not, write to
-;; the Free Software Foundation, Inc., 51 Franklin Street, Fifth
-;; Floor, Boston, MA 02110-1301, USA.
+;; You should have received a copy of the GNU General Public License along with
+;; this program; see the file COPYING.  If not, write to the Free Software
+;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+;; USA.
 ;;
 ;; Features that might be required by this library:
 ;;
@@ -83,6 +83,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Code:
+
 (eval-when-compile
   (require 'face-remap nil t) ;; desirable for scaling of the text in watch buffer
   (require 'ido nil t) ;; desirable for debug/undebug at point functionality
@@ -90,7 +91,7 @@
   (require 'cl))
 
 
-(defvar ess-tracebug-version "0.2.5")
+(defvar ess-tracebug-version "0.2.6")
 
 (defgroup ess-tracebug nil
   "Error navigation and debugging for ESS.
@@ -2749,7 +2750,7 @@ the words does contain ',!,' substring :)
   (setq string (replace-regexp-in-string
                 "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
   (setq string
-        (replace-regexp-in-string  "^.*\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
+        (replace-regexp-in-string  "^[^#)]+\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
   (process-send-string process (concat string "\n"))
   )
 
