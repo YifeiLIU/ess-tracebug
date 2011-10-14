@@ -2571,7 +2571,7 @@ intanbible, step char backward first"
       (setq elapsed (* (/ (+ i 1) 2.0) .1 i))
       (setq i (1+ i))
       (accept-process-output proc 0)
-      ;; (ess-if-verbose-write (format "\n -- timeout --  %s - %s" i elapsed))
+      (ess-if-verbose-write (format "\n -- timeout --  %s - %s" i elapsed))
       (if force-redisplay (redisplay t))
       (when (>= elapsed timeout)
         (ess-if-verbose-write (format "\nWaited for %s seconds. Process is bussy or waits for the user's input {ess-wait-for-process}." elapsed))
@@ -2581,17 +2581,17 @@ intanbible, step char backward first"
 
 (defun ordinary-insertion-filter2 (proc string)
   "improved version of ess filter"
-  ;; (with-current-buffer (process-buffer proc)
-  (let (moving)
-    (process-put proc 'ready (string-match "> +\\'" string))
-    (setq moving (= (point) (process-mark proc)))
-    (save-excursion
-      ;; Insert the text, moving the process-marker.
+  (message "start")
+  (process-put proc 'ready (string-match "> +\\'" string))
+  (with-current-buffer (process-buffer proc)
+    (let (moving)
+      (setq moving (= (point) (process-mark proc)))
+        ;; Insert the text, moving the process-marker.
       (goto-char (process-mark proc))
       (insert string)
-      (set-marker (process-mark proc) (point)))
-    (if moving (goto-char (process-mark proc))))
-  )
+      (set-marker (process-mark proc) (point))
+      (if moving (goto-char (process-mark proc))))
+    ))
 
 ;; (setq ess-verbose t)
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
@@ -2635,6 +2635,9 @@ intanbible, step char backward first"
                       (progn
                         (if sleep (if (numberp sleep) nil (setq sleep 1))) ; t means 1
                         (and ess-cmd-delay sleep)))
+                (setq sleep
+                      (if do-sleep (* sleep ess-cmd-delay)
+                        0.008)) ; needs sleep; emacs is slow in switching filters, so first chunk is sent to original buffer, todo:report to emacs-dev
                 (erase-buffer)
                 (set-marker (process-mark sprocess) (point-min))
                 (process-put sprocess 'ready nil)
@@ -2644,7 +2647,7 @@ intanbible, step char backward first"
                   ;; else: default
                   ;; (message "sleep:%s" (and do-sleep (* 0.4 sleep)))
                   (ess-if-verbose-write " .. waiting for ess process {ess-command2} .. ")
-                  (ess-wait-for-process sprocess )   ;; default timeout 30 seconds!
+                  (ess-wait-for-process sprocess sleep)   ;; default timeout 30 seconds!
                   )
                 ;; (message "command:%s" (process-get sprocess 'ready))
                 (delete-region (point-at-bol) (point-max))
@@ -2830,10 +2833,6 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
 (defun ess-eval-linewise2 (text-withtabs &optional
 					invisibly eob even-empty
 					wait-last-prompt sleep-sec timeout-ms)
-  ;; RDB 28/8/92 added optional arg eob
-  ;; AJR 971022: text-withtabs was text.
-  ;; MM 2006-08-23: added 'timeout-ms' -- but the effect seems "nil"
-  ;; MM 2007-01-05: added 'sleep-sec'
   "Evaluate TEXT-WITHTABS in the ESS process buffer as if typed in w/o tabs.
 Waits for prompt after each line of input, so won't break on large texts.
 
@@ -2919,7 +2918,7 @@ default 100 ms and be passed to \\[accept-process-output]."
         ;;     (while functions
         ;;       (funcall (car functions) com)
         ;;       (setq functions (cdr functions)))))
-        (process-put sprocess 'ready nil)
+        (process-put sprocess 'ready nil) ;; VS: this is the only modification of ess-tracebug
 	(process-send-string sprocess com)
 	;; wait for the prompt - after the last line of input only if wait-last:
 	(if (or wait-last-prompt
