@@ -1059,7 +1059,7 @@ Check for activation expressions (defined in
 `ess-dbg-regexp-action), when found puts iESS in the debugging state.
 If in debugging state, mirrors the output into *ess.dbg* buffer."
   (let* ((is-iess (member major-mode (list 'inferior-ess-mode 'ess-watch-mode)))
-         (pbuff (process-buffer proc))
+         (pbuf (process-buffer proc))
          (dbuff (process-get proc 'dbg-buffer))
          (wbuff (get-buffer ess-watch-buffer))
          (was-active (process-get proc 'dbg-active))
@@ -1073,12 +1073,25 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
                              (match-string 3 string))) ;; Selection:
          ;;check for main  prompt!! the process splits the output and match-end == nil might indicate this only
          (has-end-prompt (string-match "> +\\'" string))
+         (prompt-regexp "^>\\( [>+]\\)*\\( \\)$")
+         (prompt-replace-regexp "^>\\( [>+]\\)*\\( \\)[^>+\n]")
          ) ; current-buffer is still the user's input buffer here
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
-    (if inferior-ess-replace-long+
-        (setq string (replace-regexp-in-string "\\(\\+ \\)\\{3\\}\\(\\+ \\)+" ess-long+replacement string))
-      )
+    ;; insert \n when necesary
+    (setq string (replace-regexp-in-string prompt-replace-regexp " \n" string nil nil 2))
+    (with-current-buffer pbuf
+      (let ((pmark (process-mark proc)))
+            (goto-char pmark)
+            (beginning-of-line)
+            (when (looking-at prompt-regexp)
+              (goto-char pmark)
+              (insert "\n")
+              (set-marker pmark (point)))
+            ))
+    ;; replace long prompts
+    (when inferior-ess-replace-long+
+      (setq string (replace-regexp-in-string "\\(\\+ \\)\\{3\\}\\(\\+ \\)+" ess-long+replacement string)))
     ;; COMINT
     (comint-output-filter proc string)
     ;; (ordinary-insertion-filter proc string)
