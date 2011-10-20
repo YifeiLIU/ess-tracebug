@@ -91,7 +91,7 @@
   (require 'cl))
 
 
-(defvar ess-tracebug-version "0.2.6")
+(defvar ess-tracebug-version "0.2.8")
 
 (defgroup ess-tracebug nil
   "Error navigation and debugging for ESS.
