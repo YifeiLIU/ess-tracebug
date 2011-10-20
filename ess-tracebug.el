@@ -193,22 +193,25 @@ activated/deactivate separately with `ess-traceback' and
   (interactive "P")
   (ess-force-buffer-current "R process to activate the tracebug mode: ")
   (with-current-buffer (process-buffer (get-process ess-local-process-name))
-    (setq arg
-          (if arg
-              (prefix-numeric-value arg)
-            (if ess-tracebug-p -1 1)))
-    (if (> arg 0)
-        (progn
-          (ess-tb-start)
-          (ess-dbg-start)
-          (message "ess-tracebug mode enabled")
-          )
-      (ess-tb-stop)
-      (ess-dbg-stop)
-      (message "ess-tracebug mode disabled")
+    (when (or (equal ess-language "S")
+              (equal ess-dialect "R"))
+      ;; activate only for S language family
+      (setq arg
+            (if arg
+                (prefix-numeric-value arg)
+              (if ess-tracebug-p -1 1)))
+      (if (> arg 0)
+          (progn
+            (ess-tb-start)
+            (ess-dbg-start)
+            (message "ess-tracebug mode enabled")
+            )
+        (ess-tb-stop)
+        (ess-dbg-stop)
+        (message "ess-tracebug mode disabled")
+        )
       )
-    )
-  )
+    ))
 
 
 ;;;_* TRACEBACK
