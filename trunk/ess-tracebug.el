@@ -5,7 +5,7 @@
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
 ;; Created: Oct 14 14:15:22 2010
-;; Version: 0.2.5
+;; Version: 0.2.8
 ;; URL: http://code.google.com/p/ess-tracebug/
 ;; Keywords: debug, watch, traceback, ESS, R
 ;;
