@@ -2765,11 +2765,12 @@ the words does contain ',!,' substring :)
 
 
 (defun ess-process-send-string (process string)
-  (process-put process 'ready nil)
-  (setq string (replace-regexp-in-string
-                "\n\\s *$" "" string));empty lines (interfere with evals in debug mode
+  (when (process-get process 'dbg-active)
+    (setq string (replace-regexp-in-string
+                  "\n\\s *$" "" string))) ; remove empty lines (interfere with evals) in debug state
   (setq string
-        (replace-regexp-in-string  "^[^#)]+\\()\\).*\\'" "\n)" string nil nil 1)) ;;useful  for busy prompt facility
+        (replace-regexp-in-string  "^[^#]+\\()\\)[^)]*\\'" "\n)" string nil nil 1)) ;;needed for busy prompt
+  (process-put process 'ready nil)
   (process-send-string process (concat string "\n"))
   )
 
