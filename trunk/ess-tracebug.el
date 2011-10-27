@@ -659,6 +659,12 @@ Elements should be directory names, not file names of directories.
   "This is t in ess.dbg buffers.")
 (make-variable-buffer-local 'ess-dbg-buf-p)
 
+(defcustom ess-dbg-auto-single-key-p t
+  "If t entering the debug state triggers single-key mode.
+Set it to nil if you want to trigger single-key mode manually
+with the `ess-tracebug-command-prefix' key.
+")
+
 (defvar ess-dbg-current-debug-position (make-marker)
   "Marker to the current debugged line.
  It always point to the beginning of the currently debugged line
@@ -1139,7 +1145,8 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
       (unless is-iess
         (ring-insert ess-dbg-forward-ring input-point))
       (process-put proc 'dbg-active t)
-      (ess-dbg-easy-command t)
+      (when ess-dbg-auto-single-key-p
+        (ess-dbg-easy-command t))
       )
     ))
 
