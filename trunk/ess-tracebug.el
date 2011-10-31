@@ -2604,7 +2604,6 @@ intanbible, step char backward first"
 
 (defun ordinary-insertion-filter2 (proc string)
   "improved version of ess filter"
-  (message "start")
   (process-put proc 'ready (string-match "> +\\'" string))
   (with-current-buffer (process-buffer proc)
     (let (moving)
