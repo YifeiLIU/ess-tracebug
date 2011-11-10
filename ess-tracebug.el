@@ -962,6 +962,7 @@ watch and loggers.  Integrates into ESS and iESS modes by binding
       (if (member ess-dialect '("XLS" "SAS" "STA"))
           (error "Can not activate the debuger for %s dialect" ess-dialect)
         )
+      (setq orig-R-mode-line-process mode-line-process)
       (setq mode-line-process '(" ["
                                 ess-local-process-name
                                 " "
@@ -1005,7 +1006,7 @@ Kill the *ess.dbg.[R_name]* buffer."
     (with-current-buffer (process-buffer proc)
       (if (member ess-dialect '("XLS" "SAS" "STA"))
           (error "Can not deactivate the debuger for %s dialect" ess-dialect))
-      (setq mode-line-process '(" [" ess-local-process-name "] %s"))
+      (setq mode-line-process orig-R-mode-line-process)
       )
     (set-process-filter proc 'inferior-ess-output-filter)
     (kill-buffer (process-get proc 'dbg-buffer))
