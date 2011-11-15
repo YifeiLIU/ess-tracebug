@@ -111,6 +111,20 @@ Use `ess-tracebug' function to toggle this variable")
 (make-variable-buffer-local 'ess-tracebug-p)
 (add-to-list 'minor-mode-alist '(ess-tracebug-p ess-tracebug-indicator))
 
+(defcustom ess-tracebug-enter-hook nil
+  "List of functions to call on entry to ess-tracebug mode.
+Use `add-hook' to insert append your functions to this list.
+"
+  :group 'ess-tracebug
+  :type 'hook)
+
+(defcustom ess-tracebug-exit-hook nil
+  "List of functions to call on exit of ess-tracebug mode.
+Use `add-hook' to insert append your functions to this list.
+"
+  :group 'ess-tracebug
+  :type 'hook)
+
 (defcustom ess-tracebug-command-prefix "\M-c"
   "*Key to be used as prefix in ess-debug command key bindings.
 
@@ -204,10 +218,12 @@ activated/deactivate separately with `ess-traceback' and
           (progn
             (ess-tb-start)
             (ess-dbg-start)
+	    (run-hooks 'ess-tracebug-enter-hook)
             (message "ess-tracebug mode enabled")
             )
         (ess-tb-stop)
         (ess-dbg-stop)
+	(run-hooks 'ess-tracebug-exit-hook)
         (message "ess-tracebug mode disabled")
         )
       )
@@ -2441,14 +2457,12 @@ for signature and trace it with browser tracer."
           (setq default-string (concat "(" obj-at-point ")"))
         (setq obj-at-point nil)
         ))
-    (when  (and ess-dbg-use-ido
-                (featurep 'ido )
-                (not ido-mode))
-      ;; start an ido mode if needed, completion for methods is difficult without it
-      (setq reset-ido t)
-      (ido-mode 'buffer))
     (unwind-protect
         (progn
+          (when  (and ess-use-ido-p (featurep 'ido) (not ido-mode))
+            (setq reset-ido t)
+            (add-hook 'minibuffer-setup-hook 'ido-minibuffer-setup)
+            (add-hook 'choose-completion-string-functions 'ido-choose-completion-string))
           (setq ufunc
                 (funcall loc-completing-read
                          (concat "Debug " default-string ": ")
@@ -2480,7 +2494,8 @@ for signature and trace it with browser tracer."
                 ))
             ))
       (when reset-ido
-        (ido-mode nil))
+        (remove-hook 'minibuffer-setup-hook 'ido-minibuffer-setup)
+        (remove-hook 'choose-completion-string-functions 'ido-choose-completion-string))
       )
     (message out-message)
     ))
@@ -2584,8 +2599,8 @@ intanbible, step char backward first"
   "Wait for TIMEOUT seconds the 'ready property of the process to become non-nil."
   (if sleep (sleep-for sleep)); we sleep here, *and* wait below
   (unless timeout
-    (setq timeout 30))
-  (let ((i 1)
+    (setq timeout 60)) ;;todo:remove altogether?
+  (let ((i 0.5)
         (elapsed 0.0))
     (accept-process-output proc 0.01) ;; enought for most of the short commands on my machine
     (while (and (not (process-get proc 'ready))
@@ -2618,7 +2633,7 @@ intanbible, step char backward first"
 
 ;; (setq ess-verbose t)
 (defun ess-command2 (com &optional buf sleep no-prompt-check)
-  "Improved version of `ess-command'. Intended to be used when ess-tracebug is on"
+  "Improved version of `ess-command'. Intended to be used when ess-tracebug is on."
   ;; the ddeclient-p checks needs to use the local-process-name
   (unless buf
     (setq buf (get-buffer-create " *ess-command-output*")))
@@ -2673,10 +2688,12 @@ intanbible, step char backward first"
                   (ess-wait-for-process sprocess sleep)   ;; default timeout 30 seconds!
                   )
                 ;; (message "command:%s" (process-get sprocess 'ready))
+                (goto-char (point-max))
                 (delete-region (point-at-bol) (point-max))
                 )
               (ess-if-verbose-write " .. ok{ess-command2}\n")
               )
+          (ess-if-verbose-write " .. exiting{ess-command}\n")
           ;; Restore old values for process filter
           (set-process-buffer sprocess oldpb)
           (set-process-filter sprocess oldpf)
@@ -2686,49 +2703,43 @@ intanbible, step char backward first"
       )
     ))
 
+
 (defun ess-get-words-from-vector2 (command &optional no-prompt-check)
   "Evaluate the S command COMMAND, which returns a character vector.
 Return the elements of the result of COMMAND as an alist of strings.
-COMMAND need *NOT* have a terminating newline.
+COMMAND should have a terminating newline.
 
-Improves on ess-get-words-from-vector by dealing with vectors
-with arbitrary length. (max print problem) But assumes that none of
-the words does contain ',!,' substring :)
+To avoid max.print to truncate your vector, wrap your
+command (%s) in local call:
+
+local({oo<-options(max.print=100000);
+out<-try({%s});print(out);options(oo)\n}))
 "
   (let ((tbuffer (get-buffer-create
 		  " *ess-get-words*")); initial space: disable-undo
-	words end-pos start-pos)
+	words)
     (save-excursion
       (set-buffer tbuffer)
       (ess-if-verbose-write (format "ess-get-words*(%s).. " command))
-      (setq command (format "paste({%s}, collapse=',!,')\n" command))
-      (ess-command2 command tbuffer 'sleep no-prompt-check)
+      ;; VS: wrap automatically?
+      ;; (ess-command (format "local({oo<-options(max.print=100000);\nout<-try({%s});print(out);options(oo)\n})\n" command)
+      ;;              tbuffer 'sleep no-prompt-check)
+      (ess-command command tbuffer 'sleep no-prompt-check)
       (ess-if-verbose-write " [ok] ..")
       (goto-char (point-min))
-      (if (not (looking-at "[ +>]*\\[1\\]"))
+      (if (not (looking-at "[+ \t>\n]*\\[1\\]"))
 	  (progn (ess-if-verbose-write "not seeing \"[1]\".. ")
 		 (setq words nil)
                  )
-	(goto-char (point-min))
-        (setq start-pos  (re-search-forward "\"" nil t))
-        (goto-char (point-max))
-        (setq end-pos (re-search-backward "\"" nil t))
-        (setq words (split-string
-                     (buffer-substring-no-properties start-pos end-pos)
-                     ",!,"))
-        )
+	(while (re-search-forward "\"\\(\\(\\\\\\\"\\|[^\"]\\)*\\)\"" nil t);match \"
+	  (setq words (cons (buffer-substring (match-beginning 1)
+					      (match-end 1)) words))))
       )
-    ;;DBG, do *not* (i.e., comment):
-    ;; (kill-buffer tbuffer)
     (ess-if-verbose-write
      (if (> (length words) 5)
          (format " |-> (length words)= %d\n" (length words))
        (format " |-> words= '%s'\n" words)))
-    (if (and (eq (length words) 1)
-             (equal (car words) ""))
-        nil
-      words)
-    ))
+    (reverse words)))
 
 
 (defun inferior-R-input-sender2 (proc string)
