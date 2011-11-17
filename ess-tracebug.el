@@ -173,7 +173,7 @@ Keys currently bound in `ess-tracebug-map':
     (define-key map "7" 'ess-dbg-easy-command)
     (define-key map "8" 'ess-dbg-easy-command)
     (define-key map "9" 'ess-dbg-easy-command)
-    (define-key map "s" 'ess-dbg-source-curent-file)
+    (define-key map "s" 'ess-dbg-source-current-file)
     (define-key map "?" 'ess-tracebug-show-help)
     (define-key map "\M-c" 'capitalize-word)
     map)
@@ -202,9 +202,9 @@ Default ess-tracebug key bindings:
 * General Debugging:
 
  `   . Show R Traceback          . `ess-show-R-traceback'
- s   . Source curent file        . `ess-dbg-source-curent-file'
+ s   . Source current file        . `ess-dbg-source-current-file'
  e   . Toggle error action       . `ess-dbg-toggle-error-action'
- d   . Flag for debuging         . `ess-dbg-flag-for-debuging'
+ d   . Flag for debugging         . `ess-dbg-flag-for-debugging'
  u   . Unflag for debugging      . `ess-dbg-unflag-for-debugging'
  w   . Watch window              . `ess-watch'
 
@@ -223,6 +223,7 @@ Default ess-tracebug key bindings:
  I   . Goto input event marker backwards    . `ess-dbg-goto-input-event-marker'
 
 * Misc:
+ ?   . Show this help . `ess-tracebug-show-help'
  C-c . `capitalize-word'
 ")
 
@@ -1541,7 +1542,7 @@ Equivalent to 'n' at the R prompt."
     )
   )
 
-(defun ess-dbg-source-curent-file ()
+(defun ess-dbg-source-current-file ()
   "Save current file and source it in the .R_GlobalEnv environment."
   ;; make it more elaborate :todo:
   (interactive)
