@@ -132,9 +132,15 @@ The postfix keys are defined in `ess-tracebug-map'.
 The overwritten binding is `capitalize-word' and is bound to 'M-c M-c'.
 You can set this to \"M-t\" for example,  which would rebind the
 default binding `transpose-words'. In this case make sure to
-rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
+rebind `M-t` to transpose-words command in the `ess-tracebug-map'.
+
+Keys currently bound in `ess-tracebug-map':
+
+\\{ess-tracebug-map}
+"
   :type 'string
   :group 'ess-tracebug)
+
 (defvar ess-tracebug-map
   (let ((map (make-sparse-keymap)))
     (define-prefix-command 'map)
@@ -168,11 +174,61 @@ rebind `M-t` to transpose-words command in the `ess-tracebug-map'."
     (define-key map "8" 'ess-dbg-easy-command)
     (define-key map "9" 'ess-dbg-easy-command)
     (define-key map "s" 'ess-dbg-source-curent-file)
+    (define-key map "?" 'ess-tracebug-show-help)
     (define-key map "\M-c" 'capitalize-word)
     map)
   "Keymap used as a binding for `ess-tracebug-command-prefix' key
- in ESS and iESS mode."
+ in ESS and iESS mode.
+
+\\{ess-tracebug-map}
+"
   )
+
+(defvar ess-tracebug-help nil
+"
+Default ess-tracebug key bindings:
+
+* Breakpoints:
+
+ b   . Set bp (repeat to cycle bp type) . `ess-bp-set'
+ B   . Set Conditional bp               . `ess-bp-set-conditional'
+ k   . Kill bp                          . `ess-bp-kil'
+ K   . Kill all bps                     . `ess-bp-kill-all'
+ t   . Toggle bp state                  . `ess-bp-toggle-state'
+ l   . Set bp logger                    . `ess-bp-set-logger'
+ C-n . Goto next bp                     . `ess-bp-next'
+ C-p . Goto previous bp                 . `ess-bp-previous'
+
+* General Debugging:
+
+ `   . Show R Traceback          . `ess-show-R-traceback'
+ s   . Source curent file        . `ess-dbg-source-curent-file'
+ e   . Toggle error action       . `ess-dbg-toggle-error-action'
+ d   . Flag for debuging         . `ess-dbg-flag-for-debuging'
+ u   . Unflag for debugging      . `ess-dbg-unflag-for-debugging'
+ w   . Watch window              . `ess-watch'
+
+* Interactive Debugging:
+
+ c   . Continue                  . `ess-dbg-command-c'
+ n   . Next step                 . `ess-dbg-command-n'
+ p   . Previous error            . `previous-error'
+ q   . Quit debugging            . `ess-dbg-command-Q'
+ 1..9. Enter recover frame       . `ess-dbg-command-digit'
+ 0   . Exit recover (also q,n,c) . `ess-dbg-command-digit'
+
+* Input Ring:
+
+ i   . Goto input event marker forwards     . `ess-dbg-goto-input-event-marker'
+ I   . Goto input event marker backwards    . `ess-dbg-goto-input-event-marker'
+
+* Misc:
+ C-c . `capitalize-word'
+")
+
+(defun ess-tracebug-show-help ()
+  (interactive)
+  (describe-variable 'ess-tracebug-help))
 
 (defun ess-tracebug--propertize (dummy bitmap face &optional string )
   "If window-system propertize DUMMY with fringe BITMAP and FACE,
@@ -199,7 +255,9 @@ This mode adds to ESS the interactive debugging, breakpoint and
 error navigation functionality.  Strictly speaking ess-tracebug
 is not a minor mode. It integrates globally into ESS and iESS.
 
-The functionality in ess-tracebug is divided on conceptual
+\\{ess-tracebug-map}
+
+Note: The functionality in ess-tracebug is divided on conceptual
 grounds in tracing and debugging and could be
 activated/deactivate separately with `ess-traceback' and
 `ess-debug' respectively.
@@ -778,7 +836,6 @@ If nil, the currently debugged line is highlighted for
     (define-key map "n" 'ess-dbg-command-n)
     (define-key map "p" 'previous-error)
     (define-key map "q" 'ess-dbg-command-Q)
-    (define-key map "u" 'ess-dbg-command-u)
     (define-key map "0" 'ess-dbg-command-digit)
     (define-key map "1" 'ess-dbg-command-digit)
     (define-key map "2" 'ess-dbg-command-digit)
@@ -791,7 +848,10 @@ If nil, the currently debugged line is highlighted for
     (define-key map "9" 'ess-dbg-command-digit)
     map)
   "Keymap used to define commands for easy input mode.
-This commands are triggered by `ess-dbg-easy-command' ."
+This commands are triggered by `ess-dbg-easy-command' .
+
+\\{ess-debug-easy-map}
+"
   )
 
 
@@ -1950,7 +2010,10 @@ can then examine these objects, plot them, and so on.
 (defun ess-watch ()
   "Run ess-watch mode on R objects.
 This is the main function.  See documentation for `ess-watch-mode' though
-for more information."
+for more information.
+
+\\{ess-watch-mode-map}
+"
   (interactive)
   (let ((wbuf (get-buffer-create ess-watch-buffer)))
     (set-buffer wbuf)
@@ -1962,7 +2025,10 @@ for more information."
   )
 
 (defvar ess-watch-mode-map nil
-  "Keymap for the *R watch* buffer.")
+  "Keymap for the *R watch* buffer.
+
+\\{ess-watch-mode-map}
+")
 
 (if ess-watch-mode-map
     ()
