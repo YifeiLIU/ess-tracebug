@@ -1,8 +1,5 @@
 ## R code used in the project
 
-
-
-
 ### DEBUG/UNDEBUG AT POINT
 
 ## length(tf <- apropos(".", mode = "function"))
