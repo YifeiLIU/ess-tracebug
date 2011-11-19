@@ -231,7 +231,7 @@ Arg has same meaning as for `ess-eval-region'."
 	      (princ (concat "Loading: " name) t)
 	      (ess-eval-region beg end vis
 			       (concat "Sourced function " (or name "???"))))
-	    t)
+	    beg-end)
 	nil))))
 
 (defvar ess--tracebug-eval-index 0
@@ -624,10 +624,10 @@ Implemented lists are `ess--busy-slash', `ess--busy-B',`ess--busy-stars', `ess--
 (add-to-list 'compilation-error-regexp-alist-alist
              '(R3 "\\(?:Error .*: *\n? +\\)\\(.*\\):\\([0-9]+\\):\\([0-9]+\\):"  1 2 3 2 1))
 (add-to-list 'compilation-error-regexp-alist-alist
-             '(R-recover "^ *[0-9]+: +\\(.+\\)#\\([0-9]+:\\)" 1 2 nil 2 1))
+             '(R-recover " *[0-9]+: +\\([^:\n\t]+?\\)#\\([0-9]+:\\)"  1 2 nil 2 1))
 
 ;; (setq ess-R-tb-regexp-alist '(R R2 R3 R-recover))
-;; (pop compilation-error-regexp-alist-alist)
+;;(pop compilation-error-regexp-alist-alist)
 
 (defun ess-show-R-traceback ()
   "Display R traceback and last error message.
@@ -1213,9 +1213,9 @@ Kill the *ess.dbg.[R_name]* buffer."
   (process-get (get-process ess-current-process-name) 'is-recover)
   )
 
-(setq ess-dbg-regexp-reference "debug at +\\(.+\\)#\\([0-9]+\\):")
-(setq ess-dbg-regexp-jump "debug at ")
-(setq ess-dbg-regexp-active
+(defvar ess-dbg-regexp-reference "debug at +\\(.+\\)#\\([0-9]+\\):")
+(defvar ess-dbg-regexp-jump "debug at ")
+(defvar ess-dbg-regexp-active
       (concat "\\(\\(?:Called from: \\)\\|\\(?:debugging in: \\)\\|\\(?:recover()\\)\\)\\|"
               "\\(\\(?:Browse[][0-9]+\\)\\|\\(?:debug: \\)\\)\\|"
               "\\(^Selection: \\'\\)"))
@@ -1247,7 +1247,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
          ) ; current-buffer is still the user's input buffer here
     (process-put proc 'ready has-end-prompt) ;; in recover also is ready?, no, command2 would not work
     (process-put proc 'is-recover match-recover)
-    ;; insert \n when necesary
+    ;; insert \n after the prompt when necesary
     (setq string (replace-regexp-in-string prompt-replace-regexp " \n" string nil nil 2))
     (with-current-buffer pbuf
       (let ((pmark (process-mark proc)))
@@ -1299,7 +1299,7 @@ If in debugging state, mirrors the output into *ess.dbg* buffer."
       (when wbuff
         (ess-watch-refresh-buffer-visibly wbuff ))
       )
-    ;; ACTIVATE the debugger and trigger EASY COMMANDif entered for the first time
+    ;; ACTIVATE the debugger and trigger EASY COMMAND if entered for the first time
     (when (and (not was-active)
                (or match-jump match-active))
       (unless is-iess
@@ -1541,8 +1541,7 @@ triggered the command."
       (call-interactively command))
     (while (setq command
                  (lookup-key ess-debug-easy-map
-                             (vector (setq ev (read-event))))
-                 )
+                             (vector (setq ev (read-event)))))
       (funcall command ev)
       )
     (push ev unread-command-events)
@@ -1563,10 +1562,17 @@ If suplied ev must be a proper key event or a string representing the digit."
          (proc (get-process ess-current-process-name))
          (mark-pos (marker-position (process-mark proc)))
          (comint-prompt-read-only nil)
-         (prompt))
+         prompt  depth)
     (if (process-get proc 'is-recover)
         (with-current-buffer (process-buffer proc)
-          (goto-char mark-pos)
+	  (goto-char mark-pos)
+	  (save-excursion
+	    (when (re-search-backward "\\(?: \\|^\\)\\([0-9]+\\):[^\t]+Selection:" ess-tb-last-input t)
+	      (setq depth (string-to-number (match-string 1)))
+	      (when (> depth 9)
+		(setq ev-char (ess-completing-read "Recover frame: " (mapcar 'number-to-string
+									     (number-sequence depth 0 -1))
+						   nil t ev-char nil)))))
           (setq prompt (delete-and-extract-region  (point-at-bol) mark-pos))
           (insert (concat  prompt ev-char "\n"))
           (process-send-string proc (concat ev-char "\n"))
@@ -1583,11 +1589,9 @@ Equivalent to 'n' at the R prompt."
   (if (not (ess-dbg-is-active))
       (message "Debugging is not active")
     (if (ess-dbg-is-recover)
-        (ess-dbg-command-digit "0") ;; get out of recover mode
+	(process-send-string (get-process ess-current-process-name) "0\n")
       (process-send-string (get-process ess-current-process-name) "\n")
-      )
-    )
-  )
+      )))
 
 (defun ess-dbg-previous-error (&optional ev)
   "Go to previous reference during the debug process.
@@ -1604,12 +1608,12 @@ debug history."
     (if (not (process-get proc 'dbg-active))
         (message "Debugging is not active")
       (when (ess-dbg-is-recover)
-        (ess-dbg-command-digit "0") ; gets out of recover mode
-        (ess-wait-for-process proc nil t 1))
-      (if (process-get proc 'dbg-active) ; still in debug mode
+	(process-send-string proc "0\n")
+        (ess-wait-for-process proc nil t 0.5))
+      (if (and (process-get proc 'dbg-active)
+	       (not (process-get proc 'is-recover))); still in debug mode
           (process-send-string proc "Q\n"))
-      )
-    ))
+      )))
 
 (defun ess-dbg-command-c (&optional ev)
   "Continue the code execution.
@@ -1619,13 +1623,12 @@ debug history."
     (if (not (process-get proc 'dbg-active))
         (message "Debugging is not active")
       (when (ess-dbg-is-recover)
-        (ess-dbg-command-digit "0")
-        (ess-wait-for-process proc nil t 1)
-        ) ;; get out of recover mode
-      (if (process-get proc 'dbg-active) ; still in debug mode
+	(process-send-string proc "0\n")
+        (ess-wait-for-process proc nil t 0.5)) ;; get out of recover mode
+      (if (and (process-get proc 'dbg-active) ; still in debug mode
+	       (not (process-get proc 'is-recover))); still in debug mode
           (process-send-string proc "c\n"))
-      )
-    ))
+      )))
 
 (defun ess-dbg-set-last-input ()
   "Set the `ess-tb-last-input' to point to the current process-mark"
