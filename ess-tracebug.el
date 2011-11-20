@@ -258,7 +258,9 @@ referenced buffer.
     (put-text-property beg end 'tb-index ess--tracebug-eval-index)
     (format "eval(parse(text=\"%s\",srcfile=srcfile(\"%s@%d\")))\n"
 	    (replace-regexp-in-string
-	     "\"" "\\\\\"" (buffer-substring-no-properties beg end))
+	     "\"" "\\\\\\&"
+	     (replace-regexp-in-string ;; how to avoid this double matching? same thing for \'???
+	      "\\\\\"" "\\\\\\&" (buffer-substring-no-properties beg end)))
 	    filename ess--tracebug-eval-index)))
 
 
