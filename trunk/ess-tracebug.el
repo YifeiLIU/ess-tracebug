@@ -3026,7 +3026,7 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
           ))
       ))
 
-  (message "Region sent to process")
+  (message (or message "Region sent to process"))
   (if (and (fboundp 'deactivate-mark) ess-eval-deactivate-mark)
       (deactivate-mark))
   ;; return value
