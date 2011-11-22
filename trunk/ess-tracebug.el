@@ -2627,7 +2627,7 @@ for signature and trace it with browser tracer."
         ))
     (unwind-protect
         (progn
-          (when  (and ess-use-ido-p (featurep 'ido) (not ido-mode))
+          (when  (and ess-dbg-use-ido (featurep 'ido) (not ido-mode))
             (setq reset-ido t)
             (add-hook 'minibuffer-setup-hook 'ido-minibuffer-setup)
             (add-hook 'choose-completion-string-functions 'ido-choose-completion-string))
