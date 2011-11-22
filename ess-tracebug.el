@@ -329,7 +329,7 @@ Default ess-tracebug key bindings:
  C-c . `capitalize-word'
 ")
 
-(defun ess-tracebug-show-help ()
+(defun ess-tracebug-show-help (&optional ev)
   (interactive)
   (describe-variable 'ess-tracebug-help))
 
@@ -931,6 +931,7 @@ If nil, the currently debugged line is highlighted for
     (define-key map "7" 'ess-dbg-command-digit)
     (define-key map "8" 'ess-dbg-command-digit)
     (define-key map "9" 'ess-dbg-command-digit)
+    (define-key map "?" 'ess-tracebug-show-help)
     map)
   "Keymap used to define commands for easy input mode.
 This commands are triggered by `ess-dbg-easy-command' .
@@ -1572,7 +1573,7 @@ If suplied ev must be a proper key event or a string representing the digit."
 	    (when (re-search-backward "\\(?: \\|^\\)\\([0-9]+\\):[^\t]+Selection:" ess-tb-last-input t)
 	      (setq depth (string-to-number (match-string 1)))
 	      (when (> depth 9)
-		(setq ev-char (ess-completing-read "Recover frame: " (mapcar 'number-to-string
+		(setq ev-char (completing-read "Recover frame: " (mapcar 'number-to-string
 									     (number-sequence depth 0 -1))
 						   nil t ev-char nil)))))
           (setq prompt (delete-and-extract-region  (point-at-bol) mark-pos))
