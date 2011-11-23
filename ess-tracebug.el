@@ -5,7 +5,7 @@
 ;; Maintainer: Spinu Vitalie
 ;; Copyright (C) 2010, Spinu Vitalie, all rights reserved.
 ;; Created: Oct 14 14:15:22 2010
-;; Version: 0.2.8
+;; Version: 0.3
 ;; URL: http://code.google.com/p/ess-tracebug/
 ;; Keywords: debug, watch, traceback, ESS, R
 ;;
@@ -89,9 +89,6 @@
   (require 'ido nil t) ;; desirable for debug/undebug at point functionality
   (require 'overlay)
   (require 'cl))
-
-
-(defvar ess-tracebug-version "0.2.8")
 
 (defgroup ess-tracebug nil
   "Error navigation and debugging for ESS.
@@ -1747,27 +1744,32 @@ List format is identical to that of `ess-bp-type-spec-alist'."
   :group 'ess-debug)
 
 
-(defun ess-bp-create (type &optional condition)
+(defun ess-bp-get-bp-specs (type &optional no-error)
+  (let ((spec-alist (cond
+	       ((eq type 'conditional)
+		(let ((tl (copy-sequence  ess-bp-conditional-spec)))
+		  (when (eq (length condition) 0)
+		    (setq condition "TRUE"))
+		  (setcar (cdr tl) (format (cadr tl) condition))
+		  (setcar (cddr tl) (format (caddr tl) condition))
+		  (list tl)))
+	       ((eq type 'logger)
+		(let ((tl (copy-sequence ess-bp-logger-spec)))
+		  (when (eq (length condition) 0)
+		    (setq condition "watchLog"))
+		  (setcar (cdr tl) (format (cadr tl) condition))
+		  (setcar (cddr tl) (format (caddr tl) condition))
+		  (list tl)))
+	       (t ess-bp-type-spec-alist))))
+    (or (assoc type spec-alist)
+	(if no-error
+	    nil
+	  (error "Undefined breakpoint type %s" type)))))
+
+(defun ess-bp-create (type &optional condition no-error)
   "Set breakpoint for the current line.
  Returns the begging position of the hidden text."
-  (let* ((spec-alist (cond
-                      ((eq type 'conditional)
-                       (let ((tl (copy-sequence  ess-bp-conditional-spec)))
-                         (when (eq (length condition) 0)
-                           (setq condition "TRUE"))
-                         (setcar (cdr tl) (format (cadr tl) condition))
-                         (setcar (cddr tl) (format (caddr tl) condition))
-                         (list tl)))
-                      ((eq type 'logger)
-                       (let ((tl (copy-sequence ess-bp-logger-spec)))
-                         (when (eq (length condition) 0)
-                           (setq condition "watchLog"))
-                         (setcar (cdr tl) (format (cadr tl) condition))
-                         (setcar (cddr tl) (format (caddr tl) condition))
-                         (list tl)))
-                      (t ess-bp-type-spec-alist)))
-         (bp-specs (or (assoc type spec-alist)
-                       (error "Undefined breakpoint type %s" type)))
+  (let* ((bp-specs (ess-bp-get-bp-specs type no-error))
          (init-pos (point-marker))
          (fringe-bitmap (nth 3 bp-specs))
          (fringe-face (nth 4 bp-specs))
@@ -1778,33 +1780,80 @@ List format is identical to that of `ess-bp-type-spec-alist'."
          (dummy-length (length dummy-string))
          insertion-pos
          )
-    (set-marker init-pos (1+ init-pos))
-    (setq displ-string (propertize displ-string
-                                   'face fringe-face
-                                   'font-lock-face fringe-face))
-    (setq bp-command (propertize bp-command
-                                 'ess-bp t
-                                 'intangible 'ess-bp
-                                 'rear-nonsticky '(intangible ess-bp bp-type)
-                                 'bp-type type
-                                 'bp-substring 'command
-                                 'display displ-string
-                                 ))
-    (setq dummy-string (propertize
-                        (ess-tracebug--propertize dummy-string fringe-bitmap fringe-face "*")
-                        'ess-bp t
-                        'intangible 'ess-bp
-                        'bp-type type
-                        'bp-substring 'dummy
-                        ))
-    (ess-tracebug--set-left-margin)
-    (back-to-indentation)
-    (setq insertion-pos (point) )
-    (insert (concat   dummy-string bp-command))
-    (indent-for-tab-command)
-    (goto-char (1- init-pos))  ;; sort of save-excursion
-    insertion-pos
-    ))
+    (when bp-specs
+      (set-marker init-pos (1+ init-pos))
+      (setq displ-string (propertize displ-string
+				     'face fringe-face
+				     'font-lock-face fringe-face))
+      (setq bp-command (propertize bp-command
+				   'ess-bp t
+				   'intangible 'ess-bp
+				   'rear-nonsticky '(intangible ess-bp bp-type)
+				   'bp-type type
+				   'bp-substring 'command
+				   'display displ-string
+				   ))
+      (setq dummy-string (propertize
+			  (ess-tracebug--propertize dummy-string fringe-bitmap fringe-face "*")
+			  'ess-bp t
+			  'intangible 'ess-bp
+			  'bp-type type
+			  'bp-substring 'dummy
+			  ))
+      (ess-tracebug--set-left-margin)
+      (back-to-indentation)
+      (setq insertion-pos (point) )
+      (insert (concat   dummy-string bp-command))
+      (indent-for-tab-command)
+      (goto-char (1- init-pos))  ;; sort of save-excursion
+      insertion-pos
+      )))
+
+(defun ess-bp-recreate-all ()
+  "internal function to recreate all bp"
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (while (re-search-forward "\\(##:ess-bp-start::\\(.*\\):##\n\\)\\([^#]*##:ess-bp-end:##\n\\)" nil t)
+	(let* ((dum-beg (match-beginning 1))
+	       (dum-end (match-end 1))
+	       (comm-beg (match-beginning 3))
+	       (comm-end (match-end 3 ))
+	       (type (intern (match-string 2)))
+	       (bp-specs (ess-bp-get-bp-specs  type t))
+	       (displ-string (nth 2 bp-specs))
+	       (fringe-face (nth 4 bp-specs))
+	       (fringe-bitmap (nth 3 bp-specs))
+	       dum-props
+	       )
+	  (when bp-specs
+	    (setq displ-string (propertize displ-string
+					   'face fringe-face
+					   'font-lock-face fringe-face))
+	    (add-text-properties comm-beg comm-end
+				 (list 'ess-bp t
+				       'intangible 'ess-bp
+				       'rear-nonsticky '(intangible ess-bp bp-type)
+				       'bp-type type
+				       'bp-substring 'command
+				       'display displ-string
+				       ))
+	    (setq dum-props
+		  (if window-system
+		      (list 'display (list 'left-fringe fringe-bitmap fringe-face))
+		    (list 'display (list '(margin left-margin)
+					 (propertize "dummy"
+						     'font-lock-face face
+						     'face face)))))
+	    (add-text-properties dum-beg dum-end
+				 (append dum-props
+					 (list 'ess-bp t
+					       'intangible 'ess-bp
+					       'bp-type type
+					       'bp-substring 'dummy
+					       )))
+	    ))))))
 
 (defun ess-bp-get-bp-position-nearby ()
   "Return the cons (beg . end) of breakpoint limit points
