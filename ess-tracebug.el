@@ -377,7 +377,7 @@ activated/deactivate separately with `ess-traceback' and
             (ess-tb-start)
             (ess-dbg-start)
 	    (add-hook 'ess-mode-hook 'ess-bp-recreate-all)
-	    (dolist (bf buffer-list)
+	    (dolist (bf (buffer-list))
 	      (with-current-buffer bf
 		(when (and (eq major-mode 'ess-mode)
 			   (equal ess-dialect "R"))
@@ -1909,12 +1909,12 @@ to the current position, nil if not found. "
   (interactive)
   (let* ((pos (ess-bp-get-bp-position-nearby))
          (same-line (if pos
-                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
-                        (types ess-bp-type-spec-alist)
-                        (ev last-command-event)
-                        (com-char  (event-basic-type ev))
-                        bp-type
-                        )
+                        (and (<=  (point-at-bol) (cdr pos)) (>= (point-at-eol) (car pos)))))
+	 (types ess-bp-type-spec-alist)
+	 (ev last-command-event)
+	 (com-char  (event-basic-type ev))
+	 bp-type
+	 )
     (when same-line
       ;; set bp-type to next type in types
       (setq bp-type (get-text-property (car pos) 'bp-type))
@@ -1955,11 +1955,13 @@ to the current position, nil if not found. "
         (init-pos (make-marker)))
     (if (null pos)
         (if (called-interactively-p) (message "No breakpoints nearby"))
-      (set-marker init-pos (1+ (point)))
+      (if (eq (point) (point-at-eol))
+	  (goto-char (1- (point)))) ;; work-arround for issue  3
+      (set-marker init-pos  (point))
       (goto-char (car pos))
       (delete-region (car pos) (cdr pos))
       (indent-for-tab-command)
-      (goto-char (1- init-pos))
+      (goto-char init-pos)
       (if (eq (point) (point-at-eol)) (forward-char))
       ))
   )
