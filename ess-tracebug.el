@@ -355,7 +355,7 @@ This mode adds to ESS the interactive debugging, breakpoint and
 error navigation functionality.  Strictly speaking ess-tracebug
 is not a minor mode. It integrates globally into ESS and iESS.
 
-\\{ess-tracebug-map}
+See `ess-tracebug-help' for the overview of ess-tracebug functionality.
 
 Note: The functionality in ess-tracebug is divided on conceptual
 grounds in tracing and debugging and could be
@@ -376,11 +376,18 @@ activated/deactivate separately with `ess-traceback' and
           (progn
             (ess-tb-start)
             (ess-dbg-start)
+	    (add-hook 'ess-mode-hook 'ess-bp-recreate-all)
+	    (dolist (bf buffer-list)
+	      (with-current-buffer bf
+		(when (and (eq major-mode 'ess-mode)
+			   (equal ess-dialect "R"))
+		  (ess-bp-recreate-all))))
 	    (run-hooks 'ess-tracebug-enter-hook)
             (message "ess-tracebug mode enabled")
             )
         (ess-tb-stop)
         (ess-dbg-stop)
+	(remove-hook 'ess-mode-hook 'ess-bp-recreate-all)
 	(run-hooks 'ess-tracebug-exit-hook)
         (message "ess-tracebug mode disabled")
         )
