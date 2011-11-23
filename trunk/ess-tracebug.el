@@ -1751,7 +1751,9 @@ List format is identical to that of `ess-bp-type-spec-alist'."
   :group 'ess-debug)
 
 
-(defun ess-bp-get-bp-specs (type &optional no-error)
+
+(defun ess-bp-get-bp-specs (type &optional condition no-error)
+  "get specs for TYPE "
   (let ((spec-alist (cond
 	       ((eq type 'conditional)
 		(let ((tl (copy-sequence  ess-bp-conditional-spec)))
@@ -1776,7 +1778,7 @@ List format is identical to that of `ess-bp-type-spec-alist'."
 (defun ess-bp-create (type &optional condition no-error)
   "Set breakpoint for the current line.
  Returns the begging position of the hidden text."
-  (let* ((bp-specs (ess-bp-get-bp-specs type no-error))
+  (let* ((bp-specs (ess-bp-get-bp-specs type condition no-error))
          (init-pos (point-marker))
          (fringe-bitmap (nth 3 bp-specs))
          (fringe-face (nth 4 bp-specs))
@@ -1816,6 +1818,7 @@ List format is identical to that of `ess-bp-type-spec-alist'."
       insertion-pos
       )))
 
+
 (defun ess-bp-recreate-all ()
   "internal function to recreate all bp"
   (save-excursion
@@ -1828,7 +1831,7 @@ List format is identical to that of `ess-bp-type-spec-alist'."
 	       (comm-beg (match-beginning 3))
 	       (comm-end (match-end 3 ))
 	       (type (intern (match-string 2)))
-	       (bp-specs (ess-bp-get-bp-specs  type t))
+	       (bp-specs (ess-bp-get-bp-specs  type nil t))
 	       (displ-string (nth 2 bp-specs))
 	       (fringe-face (nth 4 bp-specs))
 	       (fringe-bitmap (nth 3 bp-specs))
