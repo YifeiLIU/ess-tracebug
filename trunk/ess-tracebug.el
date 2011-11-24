@@ -283,23 +283,22 @@ Default ess-tracebug key bindings:
 
 * Breakpoints:
 
- b   . Set bp (repeat to cycle bp type) . `ess-bp-set'
- B   . Set Conditional bp               . `ess-bp-set-conditional'
- k   . Kill bp                          . `ess-bp-kil'
- K   . Kill all bps                     . `ess-bp-kill-all'
- t   . Toggle bp state                  . `ess-bp-toggle-state'
- l   . Set bp logger                    . `ess-bp-set-logger'
- C-n . Goto next bp                     . `ess-bp-next'
- C-p . Goto previous bp                 . `ess-bp-previous'
+ b   . Set BP (repeat to cycle BP type) . `ess-bp-set'
+ B   . Set conditional BP               . `ess-bp-set-conditional'
+ k   . Kill BP                          . `ess-bp-kil'
+ K   . Kill all BPs                     . `ess-bp-kill-all'
+ t   . Toggle BP state                  . `ess-bp-toggle-state'
+ l   . Set logger BP                    . `ess-bp-set-logger'
+ C-n . Goto next BP                     . `ess-bp-next'
+ C-p . Goto previous BP                 . `ess-bp-previous'
 
 * General Debugging:
 
- `   . Show R Traceback          . `ess-show-R-traceback'
- s   . Source current file        . `ess-dbg-source-current-file'
- e   . Toggle error action       . `ess-dbg-toggle-error-action'
- d   . Flag for debugging         . `ess-dbg-flag-for-debugging'
- u   . Unflag for debugging      . `ess-dbg-unflag-for-debugging'
- w   . Watch window              . `ess-watch'
+ `   . Show R Traceback                     . `ess-show-R-traceback'
+ e   . Toggle error action (repeat to cycle). `ess-dbg-toggle-error-action'
+ d   . Flag for debugging                   . `ess-dbg-flag-for-debugging'
+ u   . Unflag for debugging                 . `ess-dbg-unflag-for-debugging'
+ w   . Watch window                         . `ess-watch'
 
 * Navigation to errors (emacs functionality):
 
@@ -320,8 +319,8 @@ Default ess-tracebug key bindings:
  i   . Goto input event marker forwards     . `ess-dbg-goto-input-event-marker'
  I   . Goto input event marker backwards    . `ess-dbg-goto-input-event-marker'
 
-
 * Misc:
+ s   . Source current file . `ess-dbg-source-current-file'
  ?   . Show this help . `ess-tracebug-show-help'
  C-c . `capitalize-word'
 ")
@@ -1785,7 +1784,7 @@ List format is identical to that of `ess-bp-type-spec-alist'."
          (displ-string (nth 2 bp-specs))
          (bp-command (concat  (nth 1 bp-specs) "##:ess-bp-end:##\n"))
          (bp-length (length bp-command))
-         (dummy-string (concat "##:ess-bp-start::" (prin1-to-string (car bp-specs)) ":##\n"))
+         (dummy-string (format "##:ess-bp-start::%s@%s:##\n"  (car bp-specs) condition))
          (dummy-length (length dummy-string))
          insertion-pos
          )
@@ -1826,44 +1825,47 @@ List format is identical to that of `ess-bp-type-spec-alist'."
       (widen)
       (goto-char (point-min))
       (while (re-search-forward "\\(##:ess-bp-start::\\(.*\\):##\n\\)\\([^#]*##:ess-bp-end:##\n\\)" nil t)
-	(let* ((dum-beg (match-beginning 1))
+	(let ((dum-beg (match-beginning 1))
 	       (dum-end (match-end 1))
 	       (comm-beg (match-beginning 3))
 	       (comm-end (match-end 3 ))
-	       (type (intern (match-string 2)))
-	       (bp-specs (ess-bp-get-bp-specs  type nil t))
-	       (displ-string (nth 2 bp-specs))
-	       (fringe-face (nth 4 bp-specs))
-	       (fringe-bitmap (nth 3 bp-specs))
-	       dum-props
-	       )
-	  (when bp-specs
-	    (setq displ-string (propertize displ-string
-					   'face fringe-face
-					   'font-lock-face fringe-face))
-	    (add-text-properties comm-beg comm-end
-				 (list 'ess-bp t
-				       'intangible 'ess-bp
-				       'rear-nonsticky '(intangible ess-bp bp-type)
-				       'bp-type type
-				       'bp-substring 'command
-				       'display displ-string
-				       ))
-	    (setq dum-props
-		  (if window-system
-		      (list 'display (list 'left-fringe fringe-bitmap fringe-face))
-		    (list 'display (list '(margin left-margin)
-					 (propertize "dummy"
-						     'font-lock-face face
-						     'face face)))))
-	    (add-text-properties dum-beg dum-end
-				 (append dum-props
-					 (list 'ess-bp t
-					       'intangible 'ess-bp
-					       'bp-type type
-					       'bp-substring 'dummy
-					       )))
-	    ))))))
+	       (type (match-string 2))
+	       dum-props condition)
+	  (when (string-match "^\\(\\w+\\)@\\(.*\\)\\'" type)
+	    (setq condition (match-string 2 type))
+	    (setq type (match-string 1 type)))
+	  (setq type (intern type))
+	  (let* ((bp-specs (ess-bp-get-bp-specs  type condition t))
+		 (displ-string (nth 2 bp-specs))
+		 (fringe-face (nth 4 bp-specs))
+		 (fringe-bitmap (nth 3 bp-specs)))
+	    (when bp-specs
+	      (setq displ-string (propertize displ-string
+					     'face fringe-face
+					     'font-lock-face fringe-face))
+	      (add-text-properties comm-beg comm-end
+				   (list 'ess-bp t
+					 'intangible 'ess-bp
+					 'rear-nonsticky '(intangible ess-bp bp-type)
+					 'bp-type type
+					 'bp-substring 'command
+					 'display displ-string
+					 ))
+	      (setq dum-props
+		    (if window-system
+			(list 'display (list 'left-fringe fringe-bitmap fringe-face))
+		      (list 'display (list '(margin left-margin)
+					   (propertize "dummy"
+						       'font-lock-face face
+						       'face face)))))
+	      (add-text-properties dum-beg dum-end
+				   (append dum-props
+					   (list 'ess-bp t
+						 'intangible 'ess-bp
+						 'bp-type type
+						 'bp-substring 'dummy
+						 )))
+	      )))))))
 
 (defun ess-bp-get-bp-position-nearby ()
   "Return the cons (beg . end) of breakpoint limit points
