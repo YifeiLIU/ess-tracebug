@@ -640,7 +640,7 @@ Pop up a compilation/grep/occur like buffer. Usual global key
 bindings are available \(\\[next-error] and \\[previous-error]\)
 for `next-error' and `previous-error' respectively.
 
-You can bound 'no-select' versions of this commands  for convenience:
+You can bind 'no-select' versions of this commands:
 \(define-key compilation-minor-mode-map [(?n)] 'next-error-no-select\)
 \(define-key compilation-minor-mode-map [(?p)] 'previous-error-no-select\)
 "
@@ -665,6 +665,7 @@ You can bound 'no-select' versions of this commands  for convenience:
       (make-local-variable 'compilation-search-path)
       (setq compilation-search-path ess-dbg-search-path)
       (compilation-minor-mode 1)
+      (setq next-error-function 'ess-tb-next-error-function)
                                         ;(use-local-map ess-traceback-minor-mode-map)
       (pop-to-buffer trbuf)
       ;; tracebug keys
@@ -673,7 +674,7 @@ You can bound 'no-select' versions of this commands  for convenience:
       (local-set-key "\C-c\C-s" 'ess-watch-switch-process)
       (local-set-key "\C-c\C-y" 'ess-switch-to-ESS)
       (local-set-key "\C-c\C-z" 'ess-switch-to-end-of-ESS)
-      (setq buffer-read-only nil)
+      (setq buffer-read-only t)
       )
     )
   )
@@ -699,27 +700,33 @@ This is the value of `next-error-function' in iESS buffers."
   (let* ((columns compilation-error-screen-columns) ; buffer's local value
          ;; (proc (or (get-buffer-process (current-buffer))
          ;;                         (error "Current buffer has no process")))
+	 (pbuff-p (get-buffer-process (current-buffer)))
          (last 1)
 	 (n (or n 1))
 	 timestamp
          (beg-pos  ; from where the search for next error starts
-          (if (and (>= n 0)
-                   (comint-after-pmark-p))
-              ess-tb-last-input
-            (point)))
+	  (if (and pbuff-p
+		   (>= n 0)
+		   (comint-after-pmark-p))
+	      ess-tb-last-input
+	    (point)))
 	 (at-error t)
          (loc
 	  (condition-case err
 		    (compilation-next-error n  nil beg-pos)
                 (error
-                 (ess-tb-next-error-goto-process-marker)
-                 (message "Beyond last reference");(error-message-string err))
+                 (when pbuff-p
+		   (ess-tb-next-error-goto-process-marker))
+		 (if (< n 0)
+		     (message "Before first reference")
+		   (message "Beyond last reference"));(error-message-string err))
 		 (setq at-error nil)
                  )))
-         (loc (if (or (eq n 0)
+         (loc (if (or (not pbuff-p)
+		      (eq n 0)
                       (> (point) ess-tb-last-input))
                   loc
-                (ess-tb-next-error-goto-process-marker)
+		(ess-tb-next-error-goto-process-marker)
                 (message "Beyond last-input marker")
 		(setq at-error nil)
 		))
