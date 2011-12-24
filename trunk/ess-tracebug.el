@@ -1660,19 +1660,24 @@ debug history."
     )
   )
 
-(defun ess-dbg-source-current-file ()
+(defun ess-dbg-source-current-file (filename)
   "Save current file and source it in the .R_GlobalEnv environment."
   ;; make it more elaborate :todo:
-  (interactive)
+  (interactive (list
+		(or
+		 (and (eq major-mode 'ess-mode)
+		      (buffer-file-name))
+		 (expand-file-name
+		  (read-file-name "Load S file: " nil nil t)))))
   (ess-force-buffer-current "R process to use: ")
-  (when buffer-file-name
+  (when filename
     (save-buffer)
-    (save-selected-window
-      (ess-switch-to-ESS t)
-      )
+    (when (called-interactively-p)
+      (save-selected-window
+	(ess-switch-to-ESS t)))
     (ess-dbg-set-last-input)
     (process-send-string (get-process ess-current-process-name)
-                         (concat "\ninvisible(eval({source(file=\"" buffer-file-name
+                         (concat "\ninvisible(eval({source(file=\"" filename
                                  "\")\n cat(\"Sourced: " buffer-file-name "\\n\")}, env=globalenv()))\n")
 			 )
     ))
