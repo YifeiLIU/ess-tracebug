@@ -3044,7 +3044,7 @@ out<-try({%s});print(out);options(oo)\n}))
   (when (process-get process 'dbg-active)
     (setq string (replace-regexp-in-string
                   "\n\\s *$" "" string))) ; remove empty lines (interfere with evals) in debug state
-  (setq string
+  (setq string ; shift last ) by \n
         (replace-regexp-in-string  "^[^#]+\\()\\)[^)]*\\'" "\n)" string nil nil 1)) ;;needed for busy prompt
   (process-put process 'ready nil)
   (process-send-string process (concat string "\n"))
@@ -3095,6 +3095,7 @@ this does not apply when using the S-plus GUI, see `ess-eval-region-ddeclient'."
 		     (buffer-substring-no-properties start end)))
            (sprocess (get-process ess-current-process-name))
            (last-input-mark (copy-marker (process-mark sprocess))))
+      ;; (message "vis:%s \n str:\n%s" visibly string)
       (if visibly
 	  (ess-eval-linewise string)
 	(if ess-synchronize-evals
