@@ -3,7 +3,7 @@
 
 <wiki:toc max_depth="3" />
 
-In what follows it is assumed that the prefix key is the default "M-c" and other bindings are as suggested on
+In what follows it is assumed that the prefix key is "M-c" and other bindings are as suggested on
 the [http://code.google.com/p/ess-tracebug/ main page].
 
 == Sourcing Errors ==
@@ -16,12 +16,14 @@ Open `test.R`  and press M-c s (or just source it explicitly with `source("test.
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png" width=500 >
 
-Now you can jump directly to
-the error location with default emacs keys "C-x `" or "M-g n". The error position is highlighted for `next-error-highlight` seconds. Mouse-click on the highlighted reference in the process buffer will also do the job.
+Now you can jump directly to the error location with default emacs keys "C-x `"
+or "M-g n". The error position is highlighted for `next-error-highlight`
+seconds. Mouse-click on the highlighted reference in the process buffer will
+also do the job.
 
 The above navigation functionality is based on next-error and
 next-error-no-select capabilities which you get in compilation, grep
-and occur modes, and should be familiar to many of ESS users.
+and occur modes.
 
 
 == Interactive Debugger ==
@@ -30,27 +32,24 @@ Correct the  ","  error in the test.R and place the break-point (M-c b) at
 some arbitrary position.
 Source the file with M-c s.
 
-Download the [http://ess-tracebug.googlecode.com/svn/trunk/main.R `main.R`] file which contains the following code:
+Create a new file, [http://ess-tracebug.googlecode.com/svn/trunk/main.R `main.R`], which contains the following code:
 {{{
 require(stats); require(graphics)
 lm_test(Fertility ~ . , data = swiss)
 }}}
 
-Execute the above code interactively with your favorite ESS command.
-
-You should be brought to the break-point in the `test.R` file. Fringe should display a small triangle and the current
+Execute the above code interactively. You should be brought to the break-point
+in the `test.R` file. Fringe should display a small triangle and the current
 line should be highlighted:
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut2_break_point.png" width = 500>
 
 Immediately after entering the interactive debugging  start pressing n,n,n... to jump through you code. This is
-the easy-key-mode in which n,q,c do what  n,Q,c would do in R buffer. Any other event
-triggers the exit from easy-key-mode and it is passed down the emacs command loop.
+the single-key-mode in which n,q,c do what  n,Q,c would do in R buffer. Any other event
+triggers the exit from single key mode and it is passed down the emacs command loop.
 
-At any time you can execute these commands with `M-c c`, `M-c n`, `M-c q`, which also place the debugger into "easy
-key mode".
-
-"Easy key mode" is entered automatically when the debugger starts.
+At any time you can execute these commands with `M-c c`, `M-c n`, `M-c q`, which also place the debugger into single
+key mode. Single key mode is entered automatically when the debugger starts.
 
 == Breakpoints ==
 
@@ -63,16 +62,15 @@ Try placing multiple breakpoints in the buffer:
 Toggle their state (M-c t) and kill them (M-c k). These operations
 apply to the closest breakpoint to the cursor in the visible area of the buffer.
 
-The recover breackpoint insert the `recover()` command in your code. It stops the execution of the code and offers
-to browser the call stack. Ess-tracebug automatically recognizes when the `recover()` is active and activates "easy
-digit shortcuts".
-
-You can jump to a desired frame by just pressing it's number 1-9, or exit the recover with "0". "Q","n", and "c"
-also trigger the exit.
+The recover breackpoint insert the `recover()` command in your code. It stops
+the execution of the code and offers to browser the call stack. Ess-tracebug
+automatically recognizes when the `recover()` is active and activates single
+digit shortcuts. You can jump to a desired frame by just pressing it's number
+1-9, or exit the recover with "0" ("Q","n", and "c" also trigger the exit).
 
 == Debug/ Undebug at point ==
 
-Go to `test.R` and remove all the breakpoints ("M-c K"). Source the file ("M-c s").
+Go to `test.R` and remove all the breakpoints ("M-c K"). Source the file ("M-c s" or "C-c C-l").
 
 Press "M-c d" and type "lm_test"  RET:
 
@@ -101,17 +99,6 @@ It displays the complete call stack and the most recent error with the reference
 With the suggested default configuration, `n` and `p` navigate through the call-stack source positions without
 selecting the source buffer. Press `RET` to go to the source or `q` to quit.
 
-== Work-Flow ==
-
-With a big projects I always want to jump quickly to the focal point of my
-analysis. This is where I source all the project files and execute
-short code. Above, the working file is "main.R".
-
-When the debugger starts or traceback buffer pops up it would usually cover the main file.  You can jump back to
-your working file with  with M-c i. Repeatedly pressing i,i,i...  will navigate through the `ess-forward-ring`
-of previous "input points". "I" will bring you backwards through the ring.
-
-For more info on the work-flow please see the main page [http://code.google.com/p/ess-tracebug/#Work-Flow doc]
 
 
 == Watch and Loggers ==
@@ -131,3 +118,15 @@ they log them into a list in the global environment.
 Press "M-c l". You will be asked for the name of the variable to store the output. Introduce any valid R name. Source and run the code. 
 Now you
 can inspect the state of the variable directly from the R environment.
+
+== Work-Flow ==
+
+With a big projects I always want to jump quickly to the focal point of my
+analysis. This is where I source all the project files and execute
+short code. Above, the working file is "main.R".
+
+When the debugger starts or traceback buffer pops up it would usually cover the main file.  You can jump back to
+your working file with  with M-c i. Repeatedly pressing i,i,i...  will navigate through the `ess-forward-ring`
+of previous "input points". "I" will bring you backwards through the ring.
+
+For more info on the work-flow please see the main page [http://code.google.com/p/ess-tracebug/#Work-Flow doc]
