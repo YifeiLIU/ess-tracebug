@@ -3,130 +3,121 @@
 
 <wiki:toc max_depth="3" />
 
-In what follows it is assumed that the prefix key is "M-c" and other bindings are as suggested on
-the [http://code.google.com/p/ess-tracebug/ main page].
-
 == Sourcing Errors ==
 
-Download the [http://ess-tracebug.googlecode.com/svn/trunk/test.R `test.R`] file from the repository.  It contains
-one function, `lm_test`, with an erroneous "," at line 6.
+Download the [http://ess-tracebug.googlecode.com/svn/trunk/test.R `test.R`] file
+from the repository.  It contains one function, `lm_test`, with an erroneous ","
+at line 6.
 
-Open `test.R`  and press M-c s (or just source it explicitly with `source("test.R")`), you should get an error
-`unexpected ','`  with the reference to the error position highlighted:
+Open `test.R` and press `C-c C-l` (`ess-load-file`), or evaluate the function
+with `C-c C-c` or `C-M-x`. You should get an error `unexpected ','` with the
+reference to the error position highlighted:
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut1_comma_error.png" width=500 >
 
 Now you can jump directly to the error location with default emacs keys "C-x `"
 or "M-g n". The error position is highlighted for `next-error-highlight`
-seconds. Mouse-click on the highlighted reference in the process buffer will
-also do the job.
+seconds. Mouse-click on the highlighted error reference also jumps to the error
+location.
 
 The above navigation functionality is based on next-error and
 next-error-no-select capabilities which you get in compilation, grep
 and occur modes.
 
-
 == Interactive Debugger ==
 
-Correct the  ","  error in the test.R and place the break-point (M-c b) at
-some arbitrary position.
-Source the file with M-c s.
+Correct the "," error in the test.R and place the break-point (`C-c C-t b`) at
+some arbitrary position. Eval the function (`C-c C-c`).
 
 Create a new file, [http://ess-tracebug.googlecode.com/svn/trunk/main.R `main.R`], which contains the following code:
 {{{
-require(stats); require(graphics)
+require(stats)
+require(graphics)
 lm_test(Fertility ~ . , data = swiss)
 }}}
 
-Execute the above code interactively. You should be brought to the break-point
-in the `test.R` file. Fringe should display a small triangle and the current
-line should be highlighted:
+Execute the above code interactively (`C-c C-c`). You should be brought to the
+break-point in the `test.R` file. Fringe should display a small triangle and the
+current line is highlighted:
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut2_break_point.png" width = 500>
 
-Immediately after entering the interactive debugging  start pressing n,n,n... to jump through you code. This is
-the single-key-mode in which n,q,c do what  n,Q,c would do in R buffer. Any other event
-triggers the exit from single key mode and it is passed down the emacs command loop.
+Immediately after entering the interactive debugging start pressing `M-N` (aka
+`Alt-Shift-n`) to jump through you code. 
 
-At any time you can execute these commands with `M-c c`, `M-c n`, `M-c q`, which also place the debugger into single
-key mode. Single key mode is entered automatically when the debugger starts.
+When process is in the debugging mode (that is, there is a big red DB in the
+mode-line), a special keymap `ess-debug-minor-mode-map` is active. See the
+inline docstring for the available commands. Currently the following commands are bound:
+
+```
+M-C   . Continue                  . `ess-debug-command-continue'
+M-C-C . Continue multi            . `ess-debug-command-continue-multi'
+M-N   . Next step                 . `ess-debug-command-next'
+M-C-N . Next step multi           . `ess-debug-command-next-multi'
+M-U   . Up frame                  . `ess-debug-command-up'
+M-Q   . Quit debugging            . `ess-debug-command-quit'
+```
 
 == Breakpoints ==
 
 Try placing multiple breakpoints in the buffer:
 
- * M-c b - browser breakpoint
- * M-c b b - recover breakpoint
- * M-c B -conditional browser breakpoint
-
-Toggle their state (M-c t) and kill them (M-c k). These operations
-apply to the closest breakpoint to the cursor in the visible area of the buffer.
+ * C-c C-t b - browser breakpoint
+ * C-c C-t b b - recover breakpoint
+ * C-c C-t B - conditional browser breakpoint
+   
+Toggle their state (C-c C-t 0) and kill them one by one (C-c C-t k). These
+operations apply to the closest breakpoint to the cursor in the visible area
+of the buffer. Kill all breakpoints in the buffer with `C-c C-t K`.
 
 The recover breackpoint insert the `recover()` command in your code. It stops
 the execution of the code and offers to browser the call stack. Ess-tracebug
-automatically recognizes when the `recover()` is active and activates single
-digit shortcuts. You can jump to a desired frame by just pressing it's number
-1-9, or exit the recover with "0" ("Q","n", and "c" also trigger the exit).
+automatically recognizes the "Selection:" prompt and activates single digit
+shortcuts. You can jump to a desired frame by just pressing it's number 1-9, or
+exit the recover with "0".
 
 == Debug/ Undebug at point ==
 
-Go to `test.R` and remove all the breakpoints ("M-c K"). Source the file ("M-c s" or "C-c C-l").
+Go to `test.R` and remove all the breakpoints (`C-c C-t K`). Eval the function
+(`C-M-x`).
 
-Press "M-c d" and type "lm_test"  RET:
+Press `C-c C-t d` (or `C-c C-t C-d`) and enter lm_test:
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/flag2.png" width=500>
 
-This flags the "lm_test" function for the debugging. Go to "main.R" ("M-c i") and execute the code again.
-The visual debugger should start jumping again.
+This will flag the "lm_test" function for the debugging (equivalent to
+`debug(lm_test)` at R's prompt). Next time you call `lm_test()` the debugger
+will start jumping again.
 
-To undebug press "M-c u".
+To undebug press `C-c C-t u`.
 
 You also can trace/untrace S4 methods in this way.
 
-Note that the interactive mechanism of this feature is based on [http://www.emacswiki.org/emacs/InteractivelyDoThings IDO] which is part of emacs. If you are using other completion mechanisms (like _Icicles_) this feature might not work as desired. If that is the case, put the following into your `.emacs` :
-{{{
-(setq ess-dbg-use-ido nil)
-}}}
+Note that the interactive mechanism of this feature is based on
+[http://www.emacswiki.org/emacs/InteractivelyDoThings IDO] which is part of
+emacs.
 
 == Traceback Buffer ==
 
-After an error occurred, press {{{[M-c `]}}} (back-tick) to show the `*ess-traceback*` buffer:
+After an error occurred, press {{{C-c `}}} (back-tick) to show the `*ess-traceback*` buffer:
 
 <img src="http://ess-tracebug.googlecode.com/svn/trunk/img/tut3_traceback.png" width=500>
 
-It displays the complete call stack and the most recent error with the references to the source file positions highlighted.
+It displays the complete call stack and the most recent error with the
+references to the source file positions highlighted.
 
-With the suggested default configuration, `n` and `p` navigate through the call-stack source positions without
-selecting the source buffer. Press `RET` to go to the source or `q` to quit.
+In `*ess-traceback*` buffer, `compilation-minor-mode` is active. Use `C-h b` to
+see the available navigation keys.
 
+     
+== Watch ==
 
-
-== Watch and Loggers ==
-
-Press "M-c w" to open the watch window. First what you see is a list of available commands.
-You can add (a), insert (a), move up (u), down (U), kill (k), edit (e) and rename (r) expressions in that buffer. 
-Any valid R expression can be traced in the watch window.
-To quit the watch press "q".
+Press "C-c C-t w" to open the watch window. First what you see is a list of
+available commands. You can add (a), insert (i), move up (u), down (U), kill
+(k), edit (e) and rename (r) expressions in that buffer.  Any valid R expression
+can be traced in the watch window. To quit the watch press "q".
 
 <img src="https://ess-tracebug.googlecode.com/svn/trunk/img/watch.png" width=700>
 
-The watch window is continuously updated to show the current state of the variables.
-
-Loggers look like usual breakpoints but don't stop the execution. If you have any expressions in your watch list
-they log them into a list in the global environment.
-
-Press "M-c l". You will be asked for the name of the variable to store the output. Introduce any valid R name. Source and run the code. 
-Now you
-can inspect the state of the variable directly from the R environment.
-
-== Work-Flow ==
-
-With a big projects I always want to jump quickly to the focal point of my
-analysis. This is where I source all the project files and execute
-short code. Above, the working file is "main.R".
-
-When the debugger starts or traceback buffer pops up it would usually cover the main file.  You can jump back to
-your working file with  with M-c i. Repeatedly pressing i,i,i...  will navigate through the `ess-forward-ring`
-of previous "input points". "I" will bring you backwards through the ring.
-
-For more info on the work-flow please see the main page [http://code.google.com/p/ess-tracebug/#Work-Flow doc]
+The watch window is continuously updated to show the current state of the
+variables.
